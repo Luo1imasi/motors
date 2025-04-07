@@ -6,7 +6,7 @@
 class Motors : public rclcpp::Node {
    public:
     float kp_ = 75, kd_ = 5;
-    Motors() : Node("motors") {
+    Motors() : Node("motors_node") {
         for (int i = 0; i < 6; i++) {
             left_motors[i] = MotorDriver::MotorCreate(i + 1, "can0", "DM");
             left_motors[i]->MotorInit();

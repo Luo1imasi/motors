@@ -18,23 +18,40 @@ find_package(Boost COMPONENTS system)
 find_package(spdlog REQUIRED)
 find_package(fmt REQUIRED)
 
-file(GLOB_RECURSE SOURCES "src/*.cpp")
-add_library(${PROJECT_NAME} SHARED ${SOURCES})
+add_library(${PROJECT_NAME} SHARED 
+  src/dm_motor_driver.cpp
+  src/motor_driver.cpp
+  src/SocketCAN.cpp
+)
 set(PUBLIC_DEPENDENCIES
     fmt::fmt spdlog::spdlog ${Boost_LIBRARIES} pthread)
-target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/src)
+target_include_directories(${PROJECT_NAME}
+  PUBLIC 
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+  $<INSTALL_INTERFACE:include>
+)
 target_link_libraries(${PROJECT_NAME} PUBLIC ${PUBLIC_DEPENDENCIES})
 ament_target_dependencies(${PROJECT_NAME} PUBLIC rclcpp sensor_msgs)
 
 add_executable(${PROJECT_NAME}_node src/motors_node.cpp)
-target_include_directories(${PROJECT_NAME}_node PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/src)
+target_include_directories(${PROJECT_NAME}_node
+  PUBLIC 
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+  $<INSTALL_INTERFACE:include>
+)
 target_link_libraries(${PROJECT_NAME}_node PUBLIC ${PUBLIC_DEPENDENCIES} ${PROJECT_NAME})
 ament_target_dependencies(${PROJECT_NAME}_node PUBLIC rclcpp sensor_msgs)
+set_target_properties(${PROJECT_NAME}_node PROPERTIES
+    BUILD_WITH_INSTALL_RPATH TRUE
+    INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib"
+)
 
 install(TARGETS ${PROJECT_NAME}
-  DESTINATION lib)
+  LIBRARY DESTINATION lib)
 install(TARGETS ${PROJECT_NAME}_node
-  DESTINATION bin)
+  RUNTIME DESTINATION lib/${PROJECT_NAME})
+install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 
-ament_export_dependencies(sensor_msgs)
+ament_export_dependencies(rclcpp sensor_msgs)
+ament_export_libraries(${PROJECT_NAME})
 ament_package()
