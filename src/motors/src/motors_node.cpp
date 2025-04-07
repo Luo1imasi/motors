@@ -22,7 +22,12 @@ class Motors : public rclcpp::Node {
         timer_ = this->create_wall_timer(std::chrono::milliseconds(2),
                                          std::bind(&Motors::publish_joint_states, this));
     }
-    ~Motors() { left_motors[0]->MotorDeInit(); }
+    ~Motors() {
+        for (int i = 0; i < 6; i++) {
+            left_motors[i]->MotorDeInit();
+            right_motors[i]->MotorDeInit();
+        }
+    }
 
    private:
     std::shared_ptr<MotorDriver> left_motors[6];
