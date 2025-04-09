@@ -1,0 +1,10 @@
+Motors:
+    ros__parameters:
+        can0_startID: 1
+        can0_endID: 6
+        can1_startID: 7
+        can1_endID: 12
+        kp: 75
+        kd: 5
+
+
