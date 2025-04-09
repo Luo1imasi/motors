@@ -13,9 +13,6 @@ MotorDriver::MotorDriver() {
 }
 std::shared_ptr<MotorDriver> MotorDriver::MotorCreate(uint16_t motor_id, const char* interface,
                                                       const std::string type) {
-    if (motor_id <= 0 || motor_id >= 7) {
-        throw std::runtime_error("Motor ID out of range");
-    }
     if (type == "DM") {
         return std::make_shared<DmMotorDriver>(motor_id, interface);
     } else {

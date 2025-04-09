@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "SocketCAN.hpp"
+#include "iostream"
 #include "timer.hpp"
 #include "utils.hpp"
 using std::vector;
@@ -209,6 +210,7 @@ class MotorDriver {
      * @return The count of responses received from the motor.
      */
     virtual int get_response_count() const = 0;
+    virtual void refresh_motor_status() = 0;
 
     // to get torque
     // to get error code

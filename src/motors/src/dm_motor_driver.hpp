@@ -42,6 +42,7 @@ class DmMotorDriver : public MotorDriver {
         std::lock_guard<std::mutex> lock(mutex_);
         return response_count;
     }
+    virtual void refresh_motor_status() override;
 
    private:
     int response_count = 0;

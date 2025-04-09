@@ -8,7 +8,8 @@ DmMotorDriver::DmMotorDriver(uint16_t motor_id, std::string can_interface)
     motor_id_ = motor_id;
     CanCbkCondition can_condition = std::bind(
         [motor_id](const can_frame& frame) {
-            return (bool)(((uint16_t)((frame.data[0] >> 4) & 0x0F) == motor_id));
+            // std::cout << (uint16_t)(frame.data[0] & 0x0F) << std::endl;
+            return (bool)((uint16_t)((frame.data[0] & 0x0F) == motor_id));
         },
         std::placeholders::_1);
     CanCbkFunc can_callback = std::bind(&DmMotorDriver::CanRxMsgCallback, this, std::placeholders::_1);
@@ -132,7 +133,7 @@ void DmMotorDriver::CanRxMsgCallback(const can_frame& rx_frame) {
         std::lock_guard<std::mutex> lock(mutex_);
         response_count--;
     }
-    if (((uint16_t)((rx_frame.data[0] >> 4) & 0x0F) == motor_id_)) {
+    if (((uint16_t)(rx_frame.data[0] & 0x0F) == motor_id_)) {
         uint16_t motor_id_t = 0;
         uint16_t pos_int = 0;
         uint16_t spd_int = 0;
@@ -393,6 +394,27 @@ void DmMotorDriver::DmSaveRegister(uint8_t rid) {
     tx_frame.data[5] = 0xFF;
     tx_frame.data[6] = 0xFF;
     tx_frame.data[7] = 0xFF;
+    can_->transmit(tx_frame);
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        response_count++;
+    }
+}
+
+void DmMotorDriver::refresh_motor_status() {
+    can_frame tx_frame;
+    tx_frame.can_id = 0x7FF;
+    tx_frame.can_dlc = 0x08;
+
+    tx_frame.data[0] = motor_id_ & 0xFF;
+    tx_frame.data[1] = motor_id_ >> 8;
+    tx_frame.data[2] = 0xCC;
+    tx_frame.data[3] = 0x00;
+
+    tx_frame.data[4] = 0x00;
+    tx_frame.data[5] = 0x00;
+    tx_frame.data[6] = 0x00;
+    tx_frame.data[7] = 0x00;
     can_->transmit(tx_frame);
     {
         std::lock_guard<std::mutex> lock(mutex_);
