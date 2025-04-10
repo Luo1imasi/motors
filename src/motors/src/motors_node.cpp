@@ -6,25 +6,36 @@
 
 class Motors : public rclcpp::Node {
    public:
-    int kp_, kd_;
+    std::vector<float> kp_, kd_;
     int can0_startID_, can0_endID_, can1_startID_, can1_endID_;
     Motors() : Node("motors_node") {
-        this->declare_parameter<int>("kp", 75);
-        this->declare_parameter<int>("kd", 5);
+        kp_.resize(6);
+        kd_.resize(6);
+
+        this->declare_parameter<std::vector<float>>(
+            "kp", std::vector<float>{150.0, 120.0, 150.0, 75.0, 75.0, 75.0});
+        this->declare_parameter<std::vector<float>>("kd", std::vector<float>{4.0, 4.0, 2.0, 3.0, 2.0, 2.0});
         this->declare_parameter<int>("can0_startID", 0);
         this->declare_parameter<int>("can0_endID", 0);
         this->declare_parameter<int>("can1_startID", 0);
         this->declare_parameter<int>("can1_endID", 0);
 
-        this->get_parameter("kp", kp_);
-        this->get_parameter("kd", kd_);
+        std::vector<double> tmp;
+        this->get_parameter("kp", tmp);
+        std::transform(tmp.begin(), tmp.end(), kp_.begin(),
+                       [](double val) { return static_cast<float>(val); });
+        this->get_parameter("kd", tmp);
+        std::transform(tmp.begin(), tmp.end(), kd_.begin(),
+                       [](double val) { return static_cast<float>(val); });
         this->get_parameter("can0_startID", can0_startID_);
         this->get_parameter("can0_endID", can0_endID_);
         this->get_parameter("can1_startID", can1_startID_);
         this->get_parameter("can1_endID", can1_endID_);
 
-        RCLCPP_INFO(this->get_logger(), "kp: %d", kp_);
-        RCLCPP_INFO(this->get_logger(), "kd: %d", kd_);
+        RCLCPP_INFO(this->get_logger(), "kp: %f, %f, %f, %f, %f, %f", kp_[0], kp_[1], kp_[2], kp_[3], kp_[4],
+                    kp_[5]);
+        RCLCPP_INFO(this->get_logger(), "kd: %f, %f, %f, %f, %f, %f", kd_[0], kd_[1], kd_[2], kd_[3], kd_[4],
+                    kd_[5]);
         RCLCPP_INFO(this->get_logger(), "can0_startID: %d", can0_startID_);
         RCLCPP_INFO(this->get_logger(), "can0_endID: %d", can0_endID_);
         RCLCPP_INFO(this->get_logger(), "can1_startID: %d", can1_startID_);
@@ -33,20 +44,25 @@ class Motors : public rclcpp::Node {
         for (int i = can0_startID_; i <= can0_endID_; i++) {
             left_motors[i - can0_startID_] = MotorDriver::MotorCreate(i, "can0", "DM");
             left_motors[i - can0_startID_]->MotorInit();
-            Timer::ThreadSleepFor(5);
+            left_motors[i - can0_startID_]->refresh_motor_status();
+            // Timer::ThreadSleepFor(100);
+            // left_motors[i - can0_startID_]->MotorSetZero(); //标零用
         }
         for (int i = can1_startID_; i <= can1_endID_; i++) {
             right_motors[i - can1_startID_] = MotorDriver::MotorCreate(i, "can1", "DM");
             right_motors[i - can1_startID_]->MotorInit();
-            Timer::ThreadSleepFor(5);
+            right_motors[i - can1_startID_]->refresh_motor_status();
+            // Timer::ThreadSleepFor(100);
+            // left_motors[i - can1_startID_]->MotorSetZero();
         }
+        Timer::ThreadSleepFor(5);
 
         left_subscription_ = this->create_subscription<sensor_msgs::msg::JointState>(
-            "/joint_command_left", 10, std::bind(&Motors::subs_left_callback, this, std::placeholders::_1));
+            "/joint_command_left", 1, std::bind(&Motors::subs_left_callback, this, std::placeholders::_1));
         right_subscription_ = this->create_subscription<sensor_msgs::msg::JointState>(
-            "/joint_command_right", 10, std::bind(&Motors::subs_right_callback, this, std::placeholders::_1));
-        left_publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_left", 10);
-        right_publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_right", 10);
+            "/joint_command_right", 1, std::bind(&Motors::subs_right_callback, this, std::placeholders::_1));
+        left_publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_left", 1);
+        right_publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_right", 1);
         timer_ = this->create_wall_timer(std::chrono::milliseconds(5),
                                          std::bind(&Motors::publish_joint_states, this));
     }
@@ -63,23 +79,23 @@ class Motors : public rclcpp::Node {
 
     void subs_left_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg) {
         for (int i = 0; i < 6; i++) {
-            left_motors[i]->MotorMitModeCmd(msg->position[i], msg->velocity[i], kp_, kd_, msg->effort[i]);
+            left_motors[i]->MotorMitModeCmd(msg->position[i], msg->velocity[i], kp_[i], kd_[i],
+                                            msg->effort[i]);
         }
     }
 
     void subs_right_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg) {
         for (int i = 0; i < 6; i++) {
-            right_motors[i]->MotorMitModeCmd(msg->position[i], msg->velocity[i], kp_, kd_, msg->effort[i]);
+            right_motors[i]->MotorMitModeCmd(msg->position[i], msg->velocity[i], kp_[i], kd_[i],
+                                             msg->effort[i]);
         }
     }
 
     void publish_joint_states() {
-        // for (int i = 0; i < 6; i++) {
-        //     left_motors[i]->refresh_motor_status();
-        //     Timer::ThreadSleepFor(5);
-        //     right_motors[i]->refresh_motor_status();
-        //     Timer::ThreadSleepFor(5);
-        // }
+        for (int i = 0; i < 6; i++) {
+            left_motors[i]->refresh_motor_status();
+            right_motors[i]->refresh_motor_status();
+        }
         auto left_message = sensor_msgs::msg::JointState();
         left_message.header.stamp = this->now();
         left_message.name = {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6"};
