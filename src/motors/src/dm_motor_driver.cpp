@@ -6,20 +6,11 @@
 DmMotorDriver::DmMotorDriver(uint16_t motor_id, std::string can_interface)
     : MotorDriver(), can_(SocketCAN::get(can_interface)) {
     motor_id_ = motor_id;
-    CanCbkCondition can_condition = std::bind(
-        [motor_id](const can_frame& frame) {
-            // std::cout << (uint16_t)(frame.data[0] & 0x0F) << std::endl;
-            return (bool)((uint16_t)((frame.data[0] & 0x0F) == motor_id));
-        },
-        std::placeholders::_1);
     CanCbkFunc can_callback = std::bind(&DmMotorDriver::CanRxMsgCallback, this, std::placeholders::_1);
-    can_->add_can_callback(
-        std::make_tuple(std::string("motor#") + std::to_string(motor_id_), can_condition, can_callback));
+    can_->add_can_callback(can_callback, motor_id_);
 }
 
-DmMotorDriver::~DmMotorDriver() {
-    can_->remove_can_callback(std::string("motor#") + std::to_string(motor_id_));
-}
+DmMotorDriver::~DmMotorDriver() { can_->remove_can_callback(motor_id_); }
 
 void DmMotorDriver::MotorLock() {
     can_frame tx_frame;
@@ -133,26 +124,23 @@ void DmMotorDriver::CanRxMsgCallback(const can_frame& rx_frame) {
         std::lock_guard<std::mutex> lock(mutex_);
         response_count--;
     }
-    if (((uint16_t)(rx_frame.data[0] & 0x0F) == motor_id_)) {
-        uint16_t motor_id_t = 0;
-        uint16_t pos_int = 0;
-        uint16_t spd_int = 0;
-        uint16_t t_int = 0;
-        pos_int = rx_frame.data[1] << 8 | rx_frame.data[2];
-        spd_int = rx_frame.data[3] << 4 | (rx_frame.data[4] & 0xF0) >> 4;
-        t_int = (rx_frame.data[4] & 0x0F) << 8 | rx_frame.data[5];
-        motor_id_t = (rx_frame.data[0] & 0x0F);
-        if ((rx_frame.data[0] & 0xF0) >> 4 > 7) {  // error code range from 8 to 15
-            error_id_ = (rx_frame.data[0] & 0xF0) >> 4;
-        }
-        motor_pos_ = range_map(pos_int, uint16_t(0), bitmax<uint16_t>(16), kPMin, kPMax);
-        motor_spd_ = range_map(spd_int, uint16_t(0), bitmax<uint16_t>(12), kSpdMin, kSpdMax);
-        motor_current_ = range_map(t_int, uint16_t(0), bitmax<uint16_t>(12), kTorqueMin, kTorqueMax);
-        mos_temperature_ = rx_frame.data[6];
-        motor_temperature_ = rx_frame.data[7];
-
-        heartbeat_detect_counter_ = 0;
+    uint16_t motor_id_t = 0;
+    uint16_t pos_int = 0;
+    uint16_t spd_int = 0;
+    uint16_t t_int = 0;
+    pos_int = rx_frame.data[1] << 8 | rx_frame.data[2];
+    spd_int = rx_frame.data[3] << 4 | (rx_frame.data[4] & 0xF0) >> 4;
+    t_int = (rx_frame.data[4] & 0x0F) << 8 | rx_frame.data[5];
+    motor_id_t = (rx_frame.data[0] & 0x0F);
+    if ((rx_frame.data[0] & 0xF0) >> 4 > 7) {  // error code range from 8 to 15
+        error_id_ = (rx_frame.data[0] & 0xF0) >> 4;
     }
+    motor_pos_ = range_map(pos_int, uint16_t(0), bitmax<uint16_t>(16), kPMin, kPMax);
+    motor_spd_ = range_map(spd_int, uint16_t(0), bitmax<uint16_t>(12), kSpdMin, kSpdMax);
+    motor_current_ = range_map(t_int, uint16_t(0), bitmax<uint16_t>(12), kTorqueMin, kTorqueMax);
+    mos_temperature_ = rx_frame.data[6];
+    motor_temperature_ = rx_frame.data[7];
+    heartbeat_detect_counter_ = 0;
 }
 
 void DmMotorDriver::MotorGetParam(uint8_t param_cmd) {

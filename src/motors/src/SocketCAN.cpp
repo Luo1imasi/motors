@@ -58,11 +58,12 @@ void SocketCAN::open(std::string interface) {
             if (::select(maxfd + 1, &descriptors, NULL, NULL, &timeout) == 1) {
                 int len = ::read(sockfd_, &rx_frame, CAN_MTU);
                 if (len < 0) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1));  // 避免过度轮询
                     continue;
                 }
-                for (auto &[_, condition, callback] : can_callback_list_)
-                    if (condition(rx_frame)) callback(rx_frame);
+                auto it = can_callback_list_.find((CanCbkId)(rx_frame.data[0] & 0x0F));
+                if (it != can_callback_list_.end()) {
+                    it->second(rx_frame);
+                }
             }
         }
     });
@@ -71,20 +72,25 @@ void SocketCAN::open(std::string interface) {
         can_frame tx_frame;
         int count = 0;
         while (receiving_) {
-            while (tx_queue_.pop(tx_frame)) {
-                while (!::write(sockfd_, &tx_frame, sizeof(can_frame)) && count < MAX_RETRY_COUNT) {
-                    count += 1;
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1));  // 避免过度轮询
-                }
-                if (count >= MAX_RETRY_COUNT) logger_->error("Failed to transmit CAN frame");
-                count = 0;
+            {
+                std::unique_lock<std::mutex> lock(tx_mutex_);
+                tx_cv_.wait(lock, [this]() { return !tx_queue_.empty() || !receiving_; });
+                if (!receiving_) break;
+                if (!tx_queue_.pop(tx_frame)) continue;
             }
+            while (!::write(sockfd_, &tx_frame, sizeof(can_frame)) && count < MAX_RETRY_COUNT) {
+                count += 1;
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));  // 避免忙等待
+            }
+            if (count >= MAX_RETRY_COUNT) logger_->error("Failed to transmit CAN frame");
+            count = 0;
         }
     });
 }
 
 void SocketCAN::close() {
     receiving_ = false;
+    tx_cv_.notify_one();
     if (receiver_thread_.joinable()) receiver_thread_.join();
     if (sender_thread_.joinable()) sender_thread_.join();
 
@@ -97,16 +103,14 @@ void SocketCAN::transmit(const can_frame &frame) {
         logger_->error("Unable to transmit: Socket not open");
         return;
     }
+    tx_cv_.notify_one();
     tx_queue_.bounded_push(frame);
 }
 
-void SocketCAN::add_can_callback(const CanCbkTuple &callback) { can_callback_list_.emplace_back(callback); }
-
-void SocketCAN::remove_can_callback(CanCbkId id_) {
-    can_callback_list_.erase(
-        std::remove_if(can_callback_list_.begin(), can_callback_list_.end(),
-                       [id_](const CanCbkTuple &cbk) { return std::get<0>(cbk) == id_; }),
-        can_callback_list_.end());
+void SocketCAN::add_can_callback(const CanCbkFunc callback, const CanCbkId id) {
+    can_callback_list_[id] = callback;
 }
+
+void SocketCAN::remove_can_callback(CanCbkId id) { can_callback_list_.erase(id); }
 
 void SocketCAN::clear_can_callbacks() { can_callback_list_.clear(); }

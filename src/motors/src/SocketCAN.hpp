@@ -18,6 +18,7 @@
 
 #include <atomic>
 #include <boost/lockfree/queue.hpp>
+#include <condition_variable>
 #include <cstdbool>
 #include <cstdio>
 #include <cstring>
@@ -33,10 +34,9 @@ constexpr const int TX_QUEUE_SIZE = 1024;
 constexpr const int MAX_RETRY_COUNT = 3;
 
 using LFQueue = boost::lockfree::queue<can_frame, boost::lockfree::fixed_sized<true>>;
-using CanCbkCondition = std::function<bool(const can_frame &)>;
 using CanCbkFunc = std::function<void(const can_frame &)>;
-using CanCbkId = std::string;
-using CanCbkTuple = std::tuple<CanCbkId, CanCbkCondition, CanCbkFunc>;
+using CanCbkId = uint16_t;
+using CanCbkMap = std::unordered_map<CanCbkId, CanCbkFunc>;
 
 class SocketCAN {
    private:
@@ -44,13 +44,15 @@ class SocketCAN {
     int sockfd_ = -1;        // The file descriptor for the CAN socket
     std::atomic<bool> receiving_;
     LFQueue tx_queue_;
+    std::mutex tx_mutex_;
+    std::condition_variable tx_cv_;
 
     sockaddr_can addr_;      // The address of the CAN socket
     ifreq if_request_;       // The network interface request
 
     /// Receiving
     std::thread receiver_thread_;
-    std::vector<CanCbkTuple> can_callback_list_;
+    CanCbkMap can_callback_list_;
     std::mutex can_callback_mutex_;
 
     /// Transmitting
@@ -78,8 +80,8 @@ class SocketCAN {
     void close();
     void transmit(const can_frame &frame);
     void receive();
-    void add_can_callback(const CanCbkTuple &callback);
-    void remove_can_callback(CanCbkId condition);
+    void add_can_callback(const CanCbkFunc callback, const CanCbkId id);
+    void remove_can_callback(const CanCbkId id);
     void clear_can_callbacks();
 };
 
