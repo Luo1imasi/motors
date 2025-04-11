@@ -25,6 +25,9 @@ class Timer {
     static inline void ThreadSleepFor(int num_steps) {
         std::this_thread::sleep_for(std::chrono::milliseconds(num_steps));
     }
+    static inline void ThreadSleepForUs(int num_steps) {
+        std::this_thread::sleep_for(std::chrono::microseconds(num_steps));
+    }
 };
 
 #endif

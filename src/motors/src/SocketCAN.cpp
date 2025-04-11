@@ -62,6 +62,7 @@ void SocketCAN::open(std::string interface) {
                 }
                 auto it = can_callback_list_.find((CanCbkId)(rx_frame.data[0] & 0x0F));
                 if (it != can_callback_list_.end()) {
+                    std::lock_guard<std::mutex> lock(can_callback_mutex_);
                     it->second(rx_frame);
                 }
             }
@@ -103,14 +104,21 @@ void SocketCAN::transmit(const can_frame &frame) {
         logger_->error("Unable to transmit: Socket not open");
         return;
     }
-    tx_cv_.notify_one();
     tx_queue_.bounded_push(frame);
+    tx_cv_.notify_one();
 }
 
 void SocketCAN::add_can_callback(const CanCbkFunc callback, const CanCbkId id) {
+    std::lock_guard<std::mutex> lock(can_callback_mutex_);
     can_callback_list_[id] = callback;
 }
 
-void SocketCAN::remove_can_callback(CanCbkId id) { can_callback_list_.erase(id); }
+void SocketCAN::remove_can_callback(CanCbkId id) {
+    std::lock_guard<std::mutex> lock(can_callback_mutex_);
+    can_callback_list_.erase(id);
+}
 
-void SocketCAN::clear_can_callbacks() { can_callback_list_.clear(); }
+void SocketCAN::clear_can_callbacks() {
+    std::lock_guard<std::mutex> lock(can_callback_mutex_);
+    can_callback_list_.clear();
+}

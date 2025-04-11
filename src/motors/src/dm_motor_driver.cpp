@@ -57,6 +57,8 @@ uint8_t DmMotorDriver::MotorInit() {
     // send disable command to enter read mode
     DmMotorDriver::MotorUnlock();
     Timer::ThreadSleepFor(normal_sleep_time);
+    set_motor_control_mode(MIT);
+    Timer::ThreadSleepFor(normal_sleep_time);
     // send enable command to enter contorl mode
     DmMotorDriver::MotorLock();
     Timer::ThreadSleepFor(normal_sleep_time);
