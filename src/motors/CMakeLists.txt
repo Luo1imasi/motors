@@ -13,25 +13,31 @@ set(CMAKE_BUILD_TYPE Release)
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+find_package(rosidl_default_runtime REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(Boost COMPONENTS system)
 find_package(spdlog REQUIRED)
 find_package(fmt REQUIRED)
 
-add_library(${PROJECT_NAME} SHARED 
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "srv/SetMotorCommand.srv"
+  "srv/ResetMotors.srv"
+)
+
+add_library(dm_motors SHARED 
   src/dm_motor_driver.cpp
   src/motor_driver.cpp
   src/SocketCAN.cpp
 )
 set(PUBLIC_DEPENDENCIES
     fmt::fmt spdlog::spdlog ${Boost_LIBRARIES} pthread)
-target_include_directories(${PROJECT_NAME}
+target_include_directories(dm_motors
   PUBLIC 
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
   $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(${PROJECT_NAME} PUBLIC ${PUBLIC_DEPENDENCIES})
-ament_target_dependencies(${PROJECT_NAME} PUBLIC rclcpp sensor_msgs)
+target_link_libraries(dm_motors PUBLIC ${PUBLIC_DEPENDENCIES})
 
 add_executable(${PROJECT_NAME}_node src/motors_node.cpp)
 target_include_directories(${PROJECT_NAME}_node
@@ -39,14 +45,18 @@ target_include_directories(${PROJECT_NAME}_node
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
   $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(${PROJECT_NAME}_node PUBLIC ${PUBLIC_DEPENDENCIES} ${PROJECT_NAME})
-ament_target_dependencies(${PROJECT_NAME}_node PUBLIC rclcpp sensor_msgs)
+target_link_libraries(${PROJECT_NAME}_node PUBLIC ${PUBLIC_DEPENDENCIES} dm_motors)
+ament_target_dependencies(${PROJECT_NAME}_node PUBLIC rclcpp sensor_msgs rosidl_default_runtime)
+
+rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
+target_link_libraries(${PROJECT_NAME}_node PUBLIC "${cpp_typesupport_target}")
+
 set_target_properties(${PROJECT_NAME}_node PROPERTIES
     BUILD_WITH_INSTALL_RPATH TRUE
     INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib"
 )
 
-install(TARGETS ${PROJECT_NAME}
+install(TARGETS dm_motors
   LIBRARY DESTINATION lib)
 install(TARGETS ${PROJECT_NAME}_node
   RUNTIME DESTINATION lib/${PROJECT_NAME})
@@ -56,6 +66,6 @@ install(DIRECTORY config/
   DESTINATION share/${PROJECT_NAME}/config
 )
 
-ament_export_dependencies(rclcpp sensor_msgs)
-ament_export_libraries(${PROJECT_NAME})
+ament_export_dependencies(rclcpp sensor_msgs rosidl_default_runtime rosidl_default_generators)
+ament_export_libraries(dm_motors)
 ament_package()

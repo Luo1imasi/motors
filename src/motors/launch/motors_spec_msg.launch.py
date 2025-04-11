@@ -18,7 +18,7 @@ def generate_launch_description():
             Node(
                 package="motors",
                 executable="motors_node",
-                name="Motors",
+                name="MotorsNode",
                 parameters=[config],
                 output="screen",
             ),

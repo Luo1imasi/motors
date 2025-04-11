@@ -1,4 +1,4 @@
-Motors:
+MotorsNode:
     ros__parameters:
         can0_startID: 1
         can0_endID: 6
