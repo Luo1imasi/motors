@@ -168,6 +168,21 @@ class MotorsNode : public rclcpp::Node {
             {
                 std::unique_lock lock(left_mutex_);
                 for (int i = 0; i < 6; i++) {
+                    left_motors[i]->MotorMitModeCmd(0, 0, 50, 2, 0);
+                    Timer::ThreadSleepFor(1);
+                }
+            }
+            {
+                std::unique_lock lock(right_mutex_);
+                for (int i = 0; i < 6; i++) {
+                    right_motors[i]->MotorMitModeCmd(0, 0, 50, 2, 0);
+                    Timer::ThreadSleepFor(1);
+                }
+            }
+            Timer::ThreadSleepFor(500);
+            {
+                std::unique_lock lock(left_mutex_);
+                for (int i = 0; i < 6; i++) {
                     left_motors[i]->MotorMitModeCmd(0, 0, kp_[i], kd_[i], 0);
                     Timer::ThreadSleepFor(1);
                 }
