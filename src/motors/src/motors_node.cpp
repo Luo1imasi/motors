@@ -73,12 +73,13 @@ class MotorsNode : public rclcpp::Node {
                                          std::bind(&MotorsNode::publish_joint_states, this));
     }
     ~MotorsNode() {
+        std::scoped_lock lock(left_mutex_, right_mutex_);
         for (int i = 0; i < 6; i++) {
             left_motors[i]->MotorDeInit();
-            Timer::ThreadSleepForUs(200);
             right_motors[i]->MotorDeInit();
-            Timer::ThreadSleepForUs(200);
+            Timer::ThreadSleepFor(1);
         }
+        RCLCPP_INFO(this->get_logger(), "Motors Deinitialized");
     }
 
    private:
@@ -105,91 +106,62 @@ class MotorsNode : public rclcpp::Node {
 
     void publish_joint_states() {
         {
-            std::unique_lock lock(left_mutex_);
+            std::scoped_lock lock(left_mutex_, right_mutex_);
             for (int i = 0; i < 6; i++) {
                 left_motors[i]->refresh_motor_status();
-                Timer::ThreadSleepForUs(200);
-            }
-        }
-        {
-            std::unique_lock lock(right_mutex_);
-            for (int i = 0; i < 6; i++) {
                 right_motors[i]->refresh_motor_status();
                 Timer::ThreadSleepForUs(200);
             }
-        }
-        auto left_message = sensor_msgs::msg::JointState();
-        left_message.header.stamp = this->now();
-        left_message.name = {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6"};
-        {
-            std::shared_lock lock_left(left_mutex_, std::defer_lock);
-            if (lock_left.try_lock()) {
-                left_message.position = {left_motors[0]->get_motor_pos(), left_motors[1]->get_motor_pos(),
-                                         left_motors[2]->get_motor_pos(), left_motors[3]->get_motor_pos(),
-                                         left_motors[4]->get_motor_pos(), left_motors[5]->get_motor_pos()};
-                left_message.velocity = {left_motors[0]->get_motor_spd(), left_motors[1]->get_motor_spd(),
-                                         left_motors[2]->get_motor_spd(), left_motors[3]->get_motor_spd(),
-                                         left_motors[4]->get_motor_spd(), left_motors[5]->get_motor_spd()};
-                left_message.effort = {
-                    left_motors[0]->get_motor_current(), left_motors[1]->get_motor_current(),
-                    left_motors[2]->get_motor_current(), left_motors[3]->get_motor_current(),
-                    left_motors[4]->get_motor_current(), left_motors[5]->get_motor_current()};
-            }
-        }
 
-        left_publisher_->publish(left_message);
-        // RCLCPP_INFO(this->get_logger(), "Left Published JointState");
+            auto left_message = sensor_msgs::msg::JointState();
+            left_message.header.stamp = this->now();
+            left_message.name = {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6"};
 
-        auto right_message = sensor_msgs::msg::JointState();
-        right_message.header.stamp = this->now();
-        right_message.name = {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6"};
-        {
-            std::shared_lock lock_right(right_mutex_, std::defer_lock);
-            if (lock_right.try_lock()) {
-                right_message.position = {right_motors[0]->get_motor_pos(), right_motors[1]->get_motor_pos(),
-                                          right_motors[2]->get_motor_pos(), right_motors[3]->get_motor_pos(),
-                                          right_motors[4]->get_motor_pos(), right_motors[5]->get_motor_pos()};
-                right_message.velocity = {right_motors[0]->get_motor_spd(), right_motors[1]->get_motor_spd(),
-                                          right_motors[2]->get_motor_spd(), right_motors[3]->get_motor_spd(),
-                                          right_motors[4]->get_motor_spd(), right_motors[5]->get_motor_spd()};
-                right_message.effort = {
-                    right_motors[0]->get_motor_current(), right_motors[1]->get_motor_current(),
-                    right_motors[2]->get_motor_current(), right_motors[3]->get_motor_current(),
-                    right_motors[4]->get_motor_current(), right_motors[5]->get_motor_current()};
-            }
+            left_message.position = {left_motors[0]->get_motor_pos(), left_motors[1]->get_motor_pos(),
+                                     left_motors[2]->get_motor_pos(), left_motors[3]->get_motor_pos(),
+                                     left_motors[4]->get_motor_pos(), left_motors[5]->get_motor_pos()};
+            left_message.velocity = {left_motors[0]->get_motor_spd(), left_motors[1]->get_motor_spd(),
+                                     left_motors[2]->get_motor_spd(), left_motors[3]->get_motor_spd(),
+                                     left_motors[4]->get_motor_spd(), left_motors[5]->get_motor_spd()};
+            left_message.effort = {left_motors[0]->get_motor_current(), left_motors[1]->get_motor_current(),
+                                   left_motors[2]->get_motor_current(), left_motors[3]->get_motor_current(),
+                                   left_motors[4]->get_motor_current(), left_motors[5]->get_motor_current()};
+
+            left_publisher_->publish(left_message);
+            // RCLCPP_INFO(this->get_logger(), "Left Published JointState");
+
+            auto right_message = sensor_msgs::msg::JointState();
+            right_message.header.stamp = this->now();
+            right_message.name = {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6"};
+            right_message.position = {right_motors[0]->get_motor_pos(), right_motors[1]->get_motor_pos(),
+                                      right_motors[2]->get_motor_pos(), right_motors[3]->get_motor_pos(),
+                                      right_motors[4]->get_motor_pos(), right_motors[5]->get_motor_pos()};
+            right_message.velocity = {right_motors[0]->get_motor_spd(), right_motors[1]->get_motor_spd(),
+                                      right_motors[2]->get_motor_spd(), right_motors[3]->get_motor_spd(),
+                                      right_motors[4]->get_motor_spd(), right_motors[5]->get_motor_spd()};
+            right_message.effort = {
+                right_motors[0]->get_motor_current(), right_motors[1]->get_motor_current(),
+                right_motors[2]->get_motor_current(), right_motors[3]->get_motor_current(),
+                right_motors[4]->get_motor_current(), right_motors[5]->get_motor_current()};
+
+            right_publisher_->publish(right_message);
+            // RCLCPP_INFO(this->get_logger(), "Right Published JointState");
         }
-        right_publisher_->publish(right_message);
-        // RCLCPP_INFO(this->get_logger(), "Right Published JointState");
     }
 
     void reset_motors(const std::shared_ptr<motors::srv::ResetMotors::Request> request,
                       std::shared_ptr<motors::srv::ResetMotors::Response> response) {
         try {
             {
-                std::unique_lock lock(left_mutex_);
+                std::scoped_lock lock(left_mutex_, right_mutex_);
                 for (int i = 0; i < 6; i++) {
                     left_motors[i]->MotorMitModeCmd(0, 0, 50, 2, 0);
-                    Timer::ThreadSleepFor(1);
-                }
-            }
-            {
-                std::unique_lock lock(right_mutex_);
-                for (int i = 0; i < 6; i++) {
                     right_motors[i]->MotorMitModeCmd(0, 0, 50, 2, 0);
                     Timer::ThreadSleepFor(1);
                 }
-            }
-            Timer::ThreadSleepFor(500);
-            {
-                std::unique_lock lock(left_mutex_);
+                Timer::ThreadSleepFor(500);
                 for (int i = 0; i < 6; i++) {
                     left_motors[i]->MotorMitModeCmd(0, 0, kp_[i], kd_[i], 0);
-                    Timer::ThreadSleepFor(1);
-                }
-            }
-            {
-                std::unique_lock lock(right_mutex_);
-                for (int i = 0; i < 6; i++) {
                     right_motors[i]->MotorMitModeCmd(0, 0, kp_[i], kd_[i], 0);
                     Timer::ThreadSleepFor(1);
                 }
