@@ -134,8 +134,8 @@ class MotorsNode : public rclcpp::Node {
             {
                 std::scoped_lock lock(left_mutex_, right_mutex_);
                 for (int i = 0; i < 6; i++) {
-                    left_motors[i]->MotorMitModeCmd(0, 0, 50, 2, 0);
-                    right_motors[i]->MotorMitModeCmd(0, 0, 50, 2, 0);
+                    left_motors[i]->MotorMitModeCmd(0, 0, 20, 1, 0);
+                    right_motors[i]->MotorMitModeCmd(0, 0, 20, 1, 0);
                     Timer::ThreadSleepFor(1);
                 }
                 Timer::ThreadSleepFor(2000);
