@@ -62,6 +62,8 @@ uint8_t DmMotorDriver::MotorInit() {
     // send enable command to enter contorl mode
     DmMotorDriver::MotorLock();
     Timer::ThreadSleepFor(normal_sleep_time);
+    DmMotorDriver::refresh_motor_status();
+    Timer::ThreadSleepFor(normal_sleep_time);
     switch (error_id_) {
         case DMError::DM_DOWN:
             return DMError::DM_DOWN;
