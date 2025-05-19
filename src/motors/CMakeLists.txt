@@ -21,8 +21,9 @@ find_package(spdlog REQUIRED)
 find_package(fmt REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "srv/SetMotorCommand.srv"
+  "srv/ControlMotor.srv"
   "srv/ResetMotors.srv"
+  "srv/ReadMotors.srv"
 )
 
 add_library(dm_motors SHARED 
