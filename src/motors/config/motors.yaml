@@ -2,10 +2,18 @@ MotorsNode:
     ros__parameters:
         can0_startID: 1
         can0_endID: 6
+        can0_masterID_offset: 16
         can1_startID: 7
-        can1_endID: 12
-        kp: [100.0, 150.0, 100.0, 150.0, 20.0, 20.0]
-        kd: [4.0, 5.0, 4.0, 5.0, 2.0, 2.0]
-        motor_left_offset: [0.0, 0.174, 0.0, 0.436, 0.262, 0.0]
-        motor_right_offset: [0.0, -0.174, 0.0, -0.436, -0.262, 0.0]
+        can1_endID: 13
+        can1_masterID_offset: 16
+        can2_startID: 14
+        can2_endID: 18
+        can2_masterID_offset: 16
+        can3_startID: 19
+        can3_endID: 23
+        can3_masterID_offset: 16
+        kp: [100.0, 150.0, 100.0, 150.0, 40.0, 40.0, 100.0, 40.0, 40.0, 40.0, 40.0, 40.0]
+        kd: [4.0, 5.0, 4.0, 5.0, 3.0, 3.0, 4.0, 3.0, 3.0, 3.0, 3.0, 3.0]
+        motor_left_offset: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        motor_right_offset: [0.0, -0.0, 0.0, -0.0, -0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 

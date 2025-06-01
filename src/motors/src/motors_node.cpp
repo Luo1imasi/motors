@@ -10,25 +10,38 @@
 class MotorsNode : public rclcpp::Node {
    public:
     std::vector<float> kp_, kd_, motor_left_offset_, motor_right_offset_;
-    int can0_startID_, can0_endID_, can1_startID_, can1_endID_;
-    std::shared_mutex left_mutex_, right_mutex_;
+    int can0_startID_, can0_endID_, can1_startID_, can1_endID_, can2_startID_, can2_endID_, can3_startID_,
+        can3_endID_, can0_masterID_offset_, can1_masterID_offset_, can2_masterID_offset_,
+        can3_masterID_offset_;
+    std::shared_mutex left_leg_mutex_, right_leg_mutex_, left_arm_mutex_, right_arm_mutex_;
     MotorsNode() : Node("motors_node") {
-        kp_.resize(6);
-        kd_.resize(6);
-        motor_left_offset_.resize(6);
-        motor_right_offset_.resize(6);
+        kp_.resize(12);
+        kd_.resize(12);
+        motor_left_offset_.resize(11);
+        motor_right_offset_.resize(12);
 
         this->declare_parameter<std::vector<float>>(
-            "kp", std::vector<float>{150.0, 120.0, 150.0, 75.0, 75.0, 75.0});
-        this->declare_parameter<std::vector<float>>("kd", std::vector<float>{4.0, 4.0, 2.0, 3.0, 2.0, 2.0});
+            "kp",
+            std::vector<float>{100.0, 150.0, 100.0, 150.0, 40.0, 40.0, 100.0, 40.0, 40.0, 40.0, 40.0, 40.0});
+        this->declare_parameter<std::vector<float>>(
+            "kd", std::vector<float>{4.0, 5.0, 4.0, 5.0, 3.0, 3.0, 4.0, 3.0, 3.0, 3.0, 3.0, 3.0});
         this->declare_parameter<int>("can0_startID", 0);
         this->declare_parameter<int>("can0_endID", 0);
         this->declare_parameter<int>("can1_startID", 0);
         this->declare_parameter<int>("can1_endID", 0);
-        this->declare_parameter<std::vector<float>>("motor_left_offset",
-                                                    std::vector<float>{0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
-        this->declare_parameter<std::vector<float>>("motor_right_offset",
-                                                    std::vector<float>{0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+        this->declare_parameter<int>("can2_startID", 0);
+        this->declare_parameter<int>("can2_endID", 0);
+        this->declare_parameter<int>("can3_startID", 0);
+        this->declare_parameter<int>("can3_endID", 0);
+        this->declare_parameter<int>("can0_masterID_offset", 0);
+        this->declare_parameter<int>("can1_masterID_offset", 0);
+        this->declare_parameter<int>("can2_masterID_offset", 0);
+        this->declare_parameter<int>("can3_masterID_offset", 0);
+        this->declare_parameter<std::vector<float>>(
+            "motor_left_offset", std::vector<float>{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+        this->declare_parameter<std::vector<float>>(
+            "motor_right_offset",
+            std::vector<float>{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
 
         std::vector<double> tmp;
         this->get_parameter("kp", tmp);
@@ -41,6 +54,14 @@ class MotorsNode : public rclcpp::Node {
         this->get_parameter("can0_endID", can0_endID_);
         this->get_parameter("can1_startID", can1_startID_);
         this->get_parameter("can1_endID", can1_endID_);
+        this->get_parameter("can2_startID", can2_startID_);
+        this->get_parameter("can2_endID", can2_endID_);
+        this->get_parameter("can3_startID", can3_startID_);
+        this->get_parameter("can3_endID", can3_endID_);
+        this->get_parameter("can0_masterID_offset", can0_masterID_offset_);
+        this->get_parameter("can1_masterID_offset", can1_masterID_offset_);
+        this->get_parameter("can2_masterID_offset", can2_masterID_offset_);
+        this->get_parameter("can3_masterID_offset", can3_masterID_offset_);
         this->get_parameter("motor_left_offset", tmp);
         std::transform(tmp.begin(), tmp.end(), motor_left_offset_.begin(),
                        [](double val) { return static_cast<float>(val); });
@@ -48,45 +69,94 @@ class MotorsNode : public rclcpp::Node {
         std::transform(tmp.begin(), tmp.end(), motor_right_offset_.begin(),
                        [](double val) { return static_cast<float>(val); });
 
-        RCLCPP_INFO(this->get_logger(), "kp: %f, %f, %f, %f, %f, %f", kp_[0], kp_[1], kp_[2], kp_[3], kp_[4],
-                    kp_[5]);
-        RCLCPP_INFO(this->get_logger(), "kd: %f, %f, %f, %f, %f, %f", kd_[0], kd_[1], kd_[2], kd_[3], kd_[4],
-                    kd_[5]);
-        RCLCPP_INFO(this->get_logger(), "motor_left_offset: %f, %f, %f, %f, %f, %f", motor_left_offset_[0],
-                    motor_left_offset_[1], motor_left_offset_[2], motor_left_offset_[3],
-                    motor_left_offset_[4], motor_left_offset_[5]);
-        RCLCPP_INFO(this->get_logger(), "motor_right_offset: %f, %f, %f, %f, %f, %f", motor_right_offset_[0],
-                    motor_right_offset_[1], motor_right_offset_[2], motor_right_offset_[3],
-                    motor_right_offset_[4], motor_right_offset_[5]);
+        RCLCPP_INFO(this->get_logger(), "kp: %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f", kp_[0], kp_[1],
+                    kp_[2], kp_[3], kp_[4], kp_[5], kp_[6], kp_[7], kp_[8], kp_[9], kp_[10], kp_[11]);
+        RCLCPP_INFO(this->get_logger(), "kd: %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f", kd_[0], kd_[1],
+                    kd_[2], kd_[3], kd_[4], kd_[5], kd_[6], kd_[7], kd_[8], kd_[9], kd_[10], kd_[11]);
+        RCLCPP_INFO(this->get_logger(), "motor_left_offset: %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f",
+                    motor_left_offset_[0], motor_left_offset_[1], motor_left_offset_[2],
+                    motor_left_offset_[3], motor_left_offset_[4], motor_left_offset_[5],
+                    motor_left_offset_[6], motor_left_offset_[7], motor_left_offset_[8],
+                    motor_left_offset_[9], motor_left_offset_[10]);
+        RCLCPP_INFO(this->get_logger(), "motor_right_offset: %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f",
+                    motor_right_offset_[0], motor_right_offset_[1], motor_right_offset_[2],
+                    motor_right_offset_[3], motor_right_offset_[4], motor_right_offset_[5],
+                    motor_right_offset_[6], motor_right_offset_[7], motor_right_offset_[8],
+                    motor_right_offset_[9], motor_right_offset_[10], motor_right_offset_[11]);
         RCLCPP_INFO(this->get_logger(), "can0_startID: %d", can0_startID_);
         RCLCPP_INFO(this->get_logger(), "can0_endID: %d", can0_endID_);
         RCLCPP_INFO(this->get_logger(), "can1_startID: %d", can1_startID_);
         RCLCPP_INFO(this->get_logger(), "can1_endID: %d", can1_endID_);
+        RCLCPP_INFO(this->get_logger(), "can2_startID: %d", can2_startID_);
+        RCLCPP_INFO(this->get_logger(), "can2_endID: %d", can2_endID_);
+        RCLCPP_INFO(this->get_logger(), "can3_startID: %d", can3_startID_);
+        RCLCPP_INFO(this->get_logger(), "can3_endID: %d", can3_endID_);
+        RCLCPP_INFO(this->get_logger(), "can0_masterID_offset: %d", can0_masterID_offset_);
+        RCLCPP_INFO(this->get_logger(), "can1_masterID_offset: %d", can1_masterID_offset_);
+        RCLCPP_INFO(this->get_logger(), "can2_masterID_offset: %d", can2_masterID_offset_);
+        RCLCPP_INFO(this->get_logger(), "can3_masterID_offset: %d", can3_masterID_offset_);
 
         for (int i = can0_startID_; i <= can0_endID_; i++) {
-            left_motors[i - can0_startID_] = MotorDriver::MotorCreate(i, "can0", "DM");
-            left_motors[i - can0_startID_]->MotorInit();
+            left_leg_motors[i - can0_startID_] =
+                MotorDriver::MotorCreate(i, "can0", "DM", can0_masterID_offset_);
+            left_leg_motors[i - can0_startID_]->MotorInit();
             Timer::ThreadSleepFor(1);
         }
         for (int i = can1_startID_; i <= can1_endID_; i++) {
-            right_motors[i - can1_startID_] = MotorDriver::MotorCreate(i, "can1", "DM");
-            right_motors[i - can1_startID_]->MotorInit();
+            right_leg_motors[i - can1_startID_] =
+                MotorDriver::MotorCreate(i, "can1", "DM", can1_masterID_offset_);
+            right_leg_motors[i - can1_startID_]->MotorInit();
+            Timer::ThreadSleepFor(1);
+        }
+        for (int i = can2_startID_; i <= can2_endID_; i++) {
+            left_arm_motors[i - can2_startID_] =
+                MotorDriver::MotorCreate(i, "can2", "DM", can2_masterID_offset_);
+            left_arm_motors[i - can2_startID_]->MotorInit();
+            Timer::ThreadSleepFor(1);
+        }
+        for (int i = can3_startID_; i <= can3_endID_; i++) {
+            right_arm_motors[i - can3_startID_] =
+                MotorDriver::MotorCreate(i, "can3", "DM", can3_masterID_offset_);
+            right_arm_motors[i - can3_startID_]->MotorInit();
             Timer::ThreadSleepFor(1);
         }
         Timer::ThreadSleepFor(500);
-        // for (int i = 0; i < 6; i++) {
-        //     left_motors[i]->MotorSetZero();
-        //     right_motors[i]->MotorSetZero();
+        // for (int i = can0_startID_; i <= can0_endID_; i++) {
+        //     left_leg_motors[i - can0_startID_]->MotorSetZero();
         //     Timer::ThreadSleepFor(1);
         // }
-        left_subscription_ = this->create_subscription<sensor_msgs::msg::JointState>(
-            "/joint_command_left", 1,
-            std::bind(&MotorsNode::subs_left_callback, this, std::placeholders::_1));
-        right_subscription_ = this->create_subscription<sensor_msgs::msg::JointState>(
-            "/joint_command_right", 1,
-            std::bind(&MotorsNode::subs_right_callback, this, std::placeholders::_1));
-        left_publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_left", 1);
-        right_publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_right", 1);
+        // for (int i = can1_startID_; i <= can1_endID_; i++) {
+        //     right_leg_motors[i - can1_startID_]->MotorSetZero();
+        //     Timer::ThreadSleepFor(1);
+        // }
+        // for (int i = can2_startID_; i <= can2_endID_; i++) {
+        //     left_arm_motors[i - can2_startID_]->MotorSetZero();
+        //     Timer::ThreadSleepFor(1);
+        // }
+        // for (int i = can3_startID_; i <= can3_endID_; i++) {
+        //     right_arm_motors[i - can3_startID_]->MotorSetZero();
+        //     Timer::ThreadSleepFor(1);
+        // }
+        left_leg_subscription_ = this->create_subscription<sensor_msgs::msg::JointState>(
+            "/joint_command_left_leg", 1,
+            std::bind(&MotorsNode::subs_left_leg_callback, this, std::placeholders::_1));
+        right_leg_subscription_ = this->create_subscription<sensor_msgs::msg::JointState>(
+            "/joint_command_right_leg", 1,
+            std::bind(&MotorsNode::subs_right_leg_callback, this, std::placeholders::_1));
+        left_arm_subscription_ = this->create_subscription<sensor_msgs::msg::JointState>(
+            "/joint_command_left_arm", 1,
+            std::bind(&MotorsNode::subs_left_arm_callback, this, std::placeholders::_1));
+        right_arm_subscription_ = this->create_subscription<sensor_msgs::msg::JointState>(
+            "/joint_command_right_arm", 1,
+            std::bind(&MotorsNode::subs_right_arm_callback, this, std::placeholders::_1));
+        left_leg_publisher_ =
+            this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_left_leg", 1);
+        right_leg_publisher_ =
+            this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_right_leg", 1);
+        left_arm_publisher_ =
+            this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_left_arm", 1);
+        right_arm_publisher_ =
+            this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_right_arm", 1);
         control_motor_service_ = this->create_service<motors::srv::ControlMotor>(
             "control_motor",
             std::bind(&MotorsNode::control_motor, this, std::placeholders::_1, std::placeholders::_2));
@@ -98,122 +168,200 @@ class MotorsNode : public rclcpp::Node {
             std::bind(&MotorsNode::read_motors, this, std::placeholders::_1, std::placeholders::_2));
     }
     ~MotorsNode() {
-        std::scoped_lock lock(left_mutex_, right_mutex_);
-        for (int i = 0; i < 6; i++) {
-            left_motors[i]->MotorDeInit();
-            right_motors[i]->MotorDeInit();
+        std::scoped_lock lock(left_leg_mutex_, right_leg_mutex_, left_arm_mutex_, right_arm_mutex_);
+        for (int i = can0_startID_; i <= can0_endID_; i++) {
+            left_leg_motors[i - can0_startID_]->MotorDeInit();
+            Timer::ThreadSleepFor(1);
+        }
+        for (int i = can1_startID_; i <= can1_endID_; i++) {
+            right_leg_motors[i - can1_startID_]->MotorDeInit();
+            Timer::ThreadSleepFor(1);
+        }
+        for (int i = can2_startID_; i <= can2_endID_; i++) {
+            left_arm_motors[i - can2_startID_]->MotorDeInit();
+            Timer::ThreadSleepFor(1);
+        }
+        for (int i = can3_startID_; i <= can3_endID_; i++) {
+            right_arm_motors[i - can3_startID_]->MotorDeInit();
             Timer::ThreadSleepFor(1);
         }
         RCLCPP_INFO(this->get_logger(), "Motors Deinitialized");
     }
 
    private:
-    std::shared_ptr<MotorDriver> left_motors[6];
-    std::shared_ptr<MotorDriver> right_motors[6];
+    std::shared_ptr<MotorDriver> left_leg_motors[6], right_leg_motors[7], left_arm_motors[5],
+        right_arm_motors[5];
 
-    void subs_left_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg) {
-        std::unique_lock lock(left_mutex_);
-        for (int i = 0; i < 6; i++) {
-            left_motors[i]->MotorMitModeCmd(msg->position[i] + motor_left_offset_[i], msg->velocity[i],
-                                            kp_[i], kd_[i], msg->effort[i]);
-            Timer::ThreadSleepForUs(200);
-        }
+    void publish_left_leg() {
         auto left_message = sensor_msgs::msg::JointState();
         left_message.header.stamp = this->now();
         left_message.name = {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6"};
-        left_message.position = {left_motors[0]->get_motor_pos(),
-                                 left_motors[1]->get_motor_pos() - motor_left_offset_[1],  // TODO 之后去掉
-                                 left_motors[2]->get_motor_pos(),
-                                 left_motors[3]->get_motor_pos() - motor_left_offset_[3],
-                                 left_motors[4]->get_motor_pos() - motor_left_offset_[4],
-                                 left_motors[5]->get_motor_pos()};
-        left_message.velocity = {left_motors[0]->get_motor_spd(), left_motors[1]->get_motor_spd(),
-                                 left_motors[2]->get_motor_spd(), left_motors[3]->get_motor_spd(),
-                                 left_motors[4]->get_motor_spd(), left_motors[5]->get_motor_spd()};
-        left_message.effort = {left_motors[0]->get_motor_current(), left_motors[1]->get_motor_current(),
-                               left_motors[2]->get_motor_current(), left_motors[3]->get_motor_current(),
-                               left_motors[4]->get_motor_current(), left_motors[5]->get_motor_current()};
-        left_publisher_->publish(left_message);
+        left_message.position = {left_leg_motors[0]->get_motor_pos(), left_leg_motors[1]->get_motor_pos(),
+                                 left_leg_motors[2]->get_motor_pos(), left_leg_motors[3]->get_motor_pos(),
+                                 left_leg_motors[4]->get_motor_pos(), left_leg_motors[5]->get_motor_pos()};
+        left_message.velocity = {left_leg_motors[0]->get_motor_spd(), left_leg_motors[1]->get_motor_spd(),
+                                 left_leg_motors[2]->get_motor_spd(), left_leg_motors[3]->get_motor_spd(),
+                                 left_leg_motors[4]->get_motor_spd(), left_leg_motors[5]->get_motor_spd()};
+        left_message.effort = {
+            left_leg_motors[0]->get_motor_current(), left_leg_motors[1]->get_motor_current(),
+            left_leg_motors[2]->get_motor_current(), left_leg_motors[3]->get_motor_current(),
+            left_leg_motors[4]->get_motor_current(), left_leg_motors[5]->get_motor_current()};
+        left_leg_publisher_->publish(left_message);
     }
 
-    void subs_right_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg) {
-        std::unique_lock lock(right_mutex_);
-        for (int i = 0; i < 6; i++) {
-            right_motors[i]->MotorMitModeCmd(msg->position[i] + motor_right_offset_[i], msg->velocity[i],
-                                             kp_[i], kd_[i], msg->effort[i]);
-            Timer::ThreadSleepForUs(200);
-        }
+    void publish_right_leg() {
         auto right_message = sensor_msgs::msg::JointState();
         right_message.header.stamp = this->now();
-        right_message.name = {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6"};
-        right_message.position = {right_motors[0]->get_motor_pos(),
-                                  right_motors[1]->get_motor_pos() - motor_right_offset_[1],  // TODO 之后去掉
-                                  right_motors[2]->get_motor_pos(),
-                                  right_motors[3]->get_motor_pos() - motor_right_offset_[3],
-                                  right_motors[4]->get_motor_pos() - motor_right_offset_[4],
-                                  right_motors[5]->get_motor_pos()};
-        right_message.velocity = {right_motors[0]->get_motor_spd(), right_motors[1]->get_motor_spd(),
-                                  right_motors[2]->get_motor_spd(), right_motors[3]->get_motor_spd(),
-                                  right_motors[4]->get_motor_spd(), right_motors[5]->get_motor_spd()};
-        right_message.effort = {right_motors[0]->get_motor_current(), right_motors[1]->get_motor_current(),
-                                right_motors[2]->get_motor_current(), right_motors[3]->get_motor_current(),
-                                right_motors[4]->get_motor_current(), right_motors[5]->get_motor_current()};
-        right_publisher_->publish(right_message);
+        right_message.name = {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6", "joint7"};
+        right_message.position = {right_leg_motors[0]->get_motor_pos(), right_leg_motors[1]->get_motor_pos(),
+                                  right_leg_motors[2]->get_motor_pos(), right_leg_motors[3]->get_motor_pos(),
+                                  right_leg_motors[4]->get_motor_pos(), right_leg_motors[5]->get_motor_pos(),
+                                  right_leg_motors[6]->get_motor_pos()};
+        right_message.velocity = {right_leg_motors[0]->get_motor_spd(), right_leg_motors[1]->get_motor_spd(),
+                                  right_leg_motors[2]->get_motor_spd(), right_leg_motors[3]->get_motor_spd(),
+                                  right_leg_motors[4]->get_motor_spd(), right_leg_motors[5]->get_motor_spd(),
+                                  right_leg_motors[6]->get_motor_spd()};
+        right_message.effort = {
+            right_leg_motors[0]->get_motor_current(), right_leg_motors[1]->get_motor_current(),
+            right_leg_motors[2]->get_motor_current(), right_leg_motors[3]->get_motor_current(),
+            right_leg_motors[4]->get_motor_current(), right_leg_motors[5]->get_motor_current(),
+            right_leg_motors[6]->get_motor_current()};
+        right_leg_publisher_->publish(right_message);
+    }
+
+    void publish_left_arm() {
+        auto left_message = sensor_msgs::msg::JointState();
+        left_message.header.stamp = this->now();
+        left_message.name = {"joint1", "joint2", "joint3", "joint4", "joint5"};
+        left_message.position = {left_arm_motors[0]->get_motor_pos(), left_arm_motors[1]->get_motor_pos(),
+                                 left_arm_motors[2]->get_motor_pos(), left_arm_motors[3]->get_motor_pos(),
+                                 left_arm_motors[4]->get_motor_pos()};
+        left_message.velocity = {left_arm_motors[0]->get_motor_spd(), left_arm_motors[1]->get_motor_spd(),
+                                 left_arm_motors[2]->get_motor_spd(), left_arm_motors[3]->get_motor_spd(),
+                                 left_arm_motors[4]->get_motor_spd()};
+        left_message.effort = {
+            left_arm_motors[0]->get_motor_current(), left_arm_motors[1]->get_motor_current(),
+            left_arm_motors[2]->get_motor_current(), left_arm_motors[3]->get_motor_current(),
+            left_arm_motors[4]->get_motor_current()};
+        left_arm_publisher_->publish(left_message);
+    }
+
+    void publish_right_arm() {
+        auto right_message = sensor_msgs::msg::JointState();
+        right_message.header.stamp = this->now();
+        right_message.name = {"joint1", "joint2", "joint3", "joint4", "joint5"};
+        right_message.position = {right_arm_motors[0]->get_motor_pos(), right_arm_motors[1]->get_motor_pos(),
+                                  right_arm_motors[2]->get_motor_pos(), right_arm_motors[3]->get_motor_pos(),
+                                  right_arm_motors[4]->get_motor_pos()};
+        right_message.velocity = {right_arm_motors[0]->get_motor_spd(), right_arm_motors[1]->get_motor_spd(),
+                                  right_arm_motors[2]->get_motor_spd(), right_arm_motors[3]->get_motor_spd(),
+                                  right_arm_motors[4]->get_motor_spd()};
+        right_message.effort = {
+            right_arm_motors[0]->get_motor_current(), right_arm_motors[1]->get_motor_current(),
+            right_arm_motors[2]->get_motor_current(), right_arm_motors[3]->get_motor_current(),
+            right_arm_motors[4]->get_motor_current()};
+        right_arm_publisher_->publish(right_message);
+    }
+
+    void subs_left_leg_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg) {
+        std::unique_lock lock(left_leg_mutex_);
+        for (int i = can0_startID_; i <= can0_endID_; i++) {
+            left_leg_motors[i - can0_startID_]->MotorMitModeCmd(
+                msg->position[i - can0_startID_], msg->velocity[i - can0_startID_], kp_[i - can0_startID_],
+                kd_[i - can0_startID_], msg->effort[i - can0_startID_]);
+            Timer::ThreadSleepForUs(200);
+        }
+        publish_left_leg();
+    }
+
+    void subs_right_leg_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg) {
+        std::unique_lock lock(right_leg_mutex_);
+        for (int i = can1_startID_; i <= can1_endID_; i++) {
+            right_leg_motors[i - can1_startID_]->MotorMitModeCmd(
+                msg->position[i - can1_startID_], msg->velocity[i - can1_startID_], kp_[i - can1_startID_],
+                kd_[i - can1_startID_], msg->effort[i - can1_startID_]);
+            Timer::ThreadSleepForUs(200);
+        }
+        publish_right_leg();
+    }
+
+    void subs_left_arm_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg) {
+        std::unique_lock lock(left_arm_mutex_);
+        for (int i = can2_startID_; i <= can2_endID_; i++) {
+            left_arm_motors[i - can2_startID_]->MotorMitModeCmd(
+                msg->position[i - can2_startID_], msg->velocity[i - can2_startID_],
+                kp_[i - can2_startID_ + 7], kd_[i - can2_startID_ + 7], msg->effort[i - can2_startID_]);
+            Timer::ThreadSleepForUs(200);
+        }
+        publish_left_arm();
+    }
+
+    void subs_right_arm_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg) {
+        std::unique_lock lock(right_arm_mutex_);
+        for (int i = can3_startID_; i <= can3_endID_; i++) {
+            right_arm_motors[i - can3_startID_]->MotorMitModeCmd(
+                msg->position[i - can3_startID_], msg->velocity[i - can3_startID_],
+                kp_[i - can3_startID_ + 7], kd_[i - can3_startID_ + 7], msg->effort[i - can3_startID_]);
+            Timer::ThreadSleepForUs(200);
+        }
+        publish_right_arm();
     }
 
     void reset_motors(const std::shared_ptr<motors::srv::ResetMotors::Request> request,
                       std::shared_ptr<motors::srv::ResetMotors::Response> response) {
         try {
             {
-                std::scoped_lock lock(left_mutex_, right_mutex_);
-                for (int i = 0; i < 6; i++) {
-                    left_motors[i]->MotorMitModeCmd(motor_left_offset_[i], 0, 40, 2, 0);
-                    right_motors[i]->MotorMitModeCmd(motor_right_offset_[i], 0, 40, 2, 0);
+                std::scoped_lock lock(left_leg_mutex_, right_leg_mutex_, left_arm_mutex_, right_arm_mutex_);
+                for (int i = can0_startID_; i <= can0_endID_; i++) {
+                    left_leg_motors[i - can0_startID_]->MotorMitModeCmd(motor_left_offset_[i - can0_startID_],
+                                                                        0, 20, 2, 0);
+                    Timer::ThreadSleepFor(1);
+                }
+                for (int i = can1_startID_; i <= can1_endID_; i++) {
+                    right_leg_motors[i - can1_startID_]->MotorMitModeCmd(
+                        motor_right_offset_[i - can1_startID_], 0, 20, 2, 0);
+                    Timer::ThreadSleepFor(1);
+                }
+                for (int i = can2_startID_; i <= can2_endID_; i++) {
+                    left_arm_motors[i - can2_startID_]->MotorMitModeCmd(
+                        motor_left_offset_[i - can2_startID_ + 6], 0, 20, 2, 0);
+                    Timer::ThreadSleepFor(1);
+                }
+                for (int i = can3_startID_; i <= can3_endID_; i++) {
+                    right_arm_motors[i - can3_startID_]->MotorMitModeCmd(
+                        motor_right_offset_[i - can3_startID_ + 7], 0, 20, 2, 0);
                     Timer::ThreadSleepFor(1);
                 }
                 Timer::ThreadSleepFor(2000);
-                for (int i = 0; i < 6; i++) {
-                    left_motors[i]->MotorMitModeCmd(motor_left_offset_[i], 0, kp_[i], kd_[i], 0);
-                    right_motors[i]->MotorMitModeCmd(motor_right_offset_[i], 0, kp_[i], kd_[i], 0);
+                for (int i = can0_startID_; i <= can0_endID_; i++) {
+                    left_leg_motors[i - can0_startID_]->MotorMitModeCmd(motor_left_offset_[i - can0_startID_],
+                                                                        0, kp_[i - can0_startID_],
+                                                                        kd_[i - can0_startID_], 0);
+                    Timer::ThreadSleepFor(1);
+                }
+                for (int i = can1_startID_; i <= can1_endID_; i++) {
+                    right_leg_motors[i - can1_startID_]->MotorMitModeCmd(
+                        motor_right_offset_[i - can1_startID_], 0, kp_[i - can1_startID_],
+                        kd_[i - can1_startID_], 0);
+                    Timer::ThreadSleepFor(1);
+                }
+                for (int i = can2_startID_; i <= can2_endID_; i++) {
+                    left_arm_motors[i - can2_startID_]->MotorMitModeCmd(
+                        motor_left_offset_[i - can2_startID_ + 6], 0, kp_[i - can2_startID_ + 7],
+                        kd_[i - can2_startID_ + 7], 0);
+                    Timer::ThreadSleepFor(1);
+                }
+                for (int i = can3_startID_; i <= can3_endID_; i++) {
+                    right_arm_motors[i - can3_startID_]->MotorMitModeCmd(
+                        motor_right_offset_[i - can3_startID_ + 7], 0, kp_[i - can3_startID_ + 7],
+                        kd_[i - can3_startID_ + 7], 0);
                     Timer::ThreadSleepFor(1);
                 }
                 Timer::ThreadSleepFor(100);
-                auto left_message = sensor_msgs::msg::JointState();
-                left_message.header.stamp = this->now();
-                left_message.name = {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6"};
-                left_message.position = {
-                    left_motors[0]->get_motor_pos(),
-                    left_motors[1]->get_motor_pos() - motor_left_offset_[1],  // TODO 之后去掉
-                    left_motors[2]->get_motor_pos(),
-                    left_motors[3]->get_motor_pos() - motor_left_offset_[3],
-                    left_motors[4]->get_motor_pos() - motor_left_offset_[4],
-                    left_motors[5]->get_motor_pos()};
-                left_message.velocity = {left_motors[0]->get_motor_spd(), left_motors[1]->get_motor_spd(),
-                                         left_motors[2]->get_motor_spd(), left_motors[3]->get_motor_spd(),
-                                         left_motors[4]->get_motor_spd(), left_motors[5]->get_motor_spd()};
-                left_message.effort = {
-                    left_motors[0]->get_motor_current(), left_motors[1]->get_motor_current(),
-                    left_motors[2]->get_motor_current(), left_motors[3]->get_motor_current(),
-                    left_motors[4]->get_motor_current(), left_motors[5]->get_motor_current()};
-                left_publisher_->publish(left_message);
-                auto right_message = sensor_msgs::msg::JointState();
-                right_message.header.stamp = this->now();
-                right_message.name = {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6"};
-                right_message.position = {
-                    right_motors[0]->get_motor_pos(),
-                    right_motors[1]->get_motor_pos() - motor_right_offset_[1],  // TODO 之后去掉
-                    right_motors[2]->get_motor_pos(),
-                    right_motors[3]->get_motor_pos() - motor_right_offset_[3],
-                    right_motors[4]->get_motor_pos() - motor_right_offset_[4],
-                    right_motors[5]->get_motor_pos()};
-                right_message.velocity = {right_motors[0]->get_motor_spd(), right_motors[1]->get_motor_spd(),
-                                          right_motors[2]->get_motor_spd(), right_motors[3]->get_motor_spd(),
-                                          right_motors[4]->get_motor_spd(), right_motors[5]->get_motor_spd()};
-                right_message.effort = {
-                    right_motors[0]->get_motor_current(), right_motors[1]->get_motor_current(),
-                    right_motors[2]->get_motor_current(), right_motors[3]->get_motor_current(),
-                    right_motors[4]->get_motor_current(), right_motors[5]->get_motor_current()};
-                right_publisher_->publish(right_message);
+                publish_left_leg();
+                publish_right_leg();
+                publish_left_arm();
+                publish_right_arm();
             }
             response->success = true;
             response->message = "Motors reset successfully";
@@ -223,45 +371,32 @@ class MotorsNode : public rclcpp::Node {
         }
     }
 
-    void read_motors(const std::shared_ptr<motors::srv::ReadMotors::Request> request,  // TODO 48V暂时不可用
+    void read_motors(const std::shared_ptr<motors::srv::ReadMotors::Request> request,
                      std::shared_ptr<motors::srv::ReadMotors::Response> response) {
         try {
             {
-                std::scoped_lock lock(left_mutex_, right_mutex_);
-                for (int i = 0; i < 6; i++) {
-                    left_motors[i]->refresh_motor_status();
-                    right_motors[i]->refresh_motor_status();
+                std::scoped_lock lock(left_leg_mutex_, right_leg_mutex_, left_arm_mutex_, right_arm_mutex_);
+                for (int i = can0_startID_; i <= can0_endID_; i++) {
+                    left_leg_motors[i - can0_startID_]->refresh_motor_status();
+                    Timer::ThreadSleepForUs(400);
+                }
+                for (int i = can1_startID_; i <= can1_endID_; i++) {
+                    right_leg_motors[i - can1_startID_]->refresh_motor_status();
+                    Timer::ThreadSleepForUs(400);
+                }
+                for (int i = can2_startID_; i <= can2_endID_; i++) {
+                    left_arm_motors[i - can2_startID_]->refresh_motor_status();
+                    Timer::ThreadSleepForUs(400);
+                }
+                for (int i = can3_startID_; i <= can3_endID_; i++) {
+                    right_arm_motors[i - can3_startID_]->refresh_motor_status();
                     Timer::ThreadSleepForUs(400);
                 }
                 Timer::ThreadSleepFor(100);
-                auto left_message = sensor_msgs::msg::JointState();
-                left_message.header.stamp = this->now();
-                left_message.name = {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6"};
-                left_message.position = {left_motors[0]->get_motor_pos(), left_motors[1]->get_motor_pos(),
-                                         left_motors[2]->get_motor_pos(), left_motors[3]->get_motor_pos(),
-                                         left_motors[4]->get_motor_pos(), left_motors[5]->get_motor_pos()};
-                left_message.velocity = {left_motors[0]->get_motor_spd(), left_motors[1]->get_motor_spd(),
-                                         left_motors[2]->get_motor_spd(), left_motors[3]->get_motor_spd(),
-                                         left_motors[4]->get_motor_spd(), left_motors[5]->get_motor_spd()};
-                left_message.effort = {
-                    left_motors[0]->get_motor_current(), left_motors[1]->get_motor_current(),
-                    left_motors[2]->get_motor_current(), left_motors[3]->get_motor_current(),
-                    left_motors[4]->get_motor_current(), left_motors[5]->get_motor_current()};
-                left_publisher_->publish(left_message);
-                auto right_message = sensor_msgs::msg::JointState();
-                right_message.header.stamp = this->now();
-                right_message.name = {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6"};
-                right_message.position = {right_motors[0]->get_motor_pos(), right_motors[1]->get_motor_pos(),
-                                          right_motors[2]->get_motor_pos(), right_motors[3]->get_motor_pos(),
-                                          right_motors[4]->get_motor_pos(), right_motors[5]->get_motor_pos()};
-                right_message.velocity = {right_motors[0]->get_motor_spd(), right_motors[1]->get_motor_spd(),
-                                          right_motors[2]->get_motor_spd(), right_motors[3]->get_motor_spd(),
-                                          right_motors[4]->get_motor_spd(), right_motors[5]->get_motor_spd()};
-                right_message.effort = {
-                    right_motors[0]->get_motor_current(), right_motors[1]->get_motor_current(),
-                    right_motors[2]->get_motor_current(), right_motors[3]->get_motor_current(),
-                    right_motors[4]->get_motor_current(), right_motors[5]->get_motor_current()};
-                right_publisher_->publish(right_message);
+                publish_left_leg();
+                publish_right_leg();
+                publish_left_arm();
+                publish_right_arm();
             }
             response->success = true;
             response->message = "Motors read successfully";
@@ -274,21 +409,36 @@ class MotorsNode : public rclcpp::Node {
     void control_motor(const std::shared_ptr<motors::srv::ControlMotor::Request> request,
                        std::shared_ptr<motors::srv::ControlMotor::Response> response) {
         int motor_id = request->motor_id;
-        bool is_left = request->is_left;
+        int can_id = request->can_id;
         float position = request->position;
         float velocity = request->velocity;
         float effort = request->effort;
 
         try {
-            if (is_left && motor_id >= can0_startID_ && motor_id <= can0_endID_) {
-                std::unique_lock lock(left_mutex_);
-                left_motors[motor_id - can0_startID_]->MotorMitModeCmd(
+            if (can_id == 0 && motor_id >= can0_startID_ && motor_id <= can0_endID_) {
+                std::unique_lock lock(left_leg_mutex_);
+                left_leg_motors[motor_id - can0_startID_]->MotorMitModeCmd(
                     position, velocity, kp_[motor_id - can0_startID_], kd_[motor_id - can0_startID_], effort);
                 response->success = true;
-            } else if (!is_left && motor_id >= can1_startID_ && motor_id <= can1_endID_) {
-                std::unique_lock lock(right_mutex_);
-                right_motors[motor_id - can1_startID_]->MotorMitModeCmd(
+                response->message = "Send sucessfully";
+            } else if (can_id == 1 && motor_id >= can1_startID_ && motor_id <= can1_endID_) {
+                std::unique_lock lock(right_leg_mutex_);
+                right_leg_motors[motor_id - can1_startID_]->MotorMitModeCmd(
                     position, velocity, kp_[motor_id - can1_startID_], kd_[motor_id - can1_startID_], effort);
+                response->success = true;
+                response->message = "Send sucessfully";
+            } else if (can_id == 2 && motor_id >= can2_startID_ && motor_id <= can2_endID_) {
+                std::unique_lock lock(left_arm_mutex_);
+                left_arm_motors[motor_id - can2_startID_]->MotorMitModeCmd(
+                    position, velocity, kp_[motor_id - can2_startID_ + 7], kd_[motor_id - can2_startID_ + 7],
+                    effort);
+                response->success = true;
+                response->message = "Send sucessfully";
+            } else if (can_id == 3 && motor_id >= can3_startID_ && motor_id <= can3_endID_) {
+                std::unique_lock lock(right_arm_mutex_);
+                right_arm_motors[motor_id - can3_startID_]->MotorMitModeCmd(
+                    position, velocity, kp_[motor_id - can3_startID_ + 7], kd_[motor_id - can3_startID_ + 7],
+                    effort);
                 response->success = true;
                 response->message = "Send sucessfully";
             } else {
@@ -303,8 +453,10 @@ class MotorsNode : public rclcpp::Node {
     rclcpp::Service<motors::srv::ControlMotor>::SharedPtr control_motor_service_;
     rclcpp::Service<motors::srv::ResetMotors>::SharedPtr reset_motors_service_;
     rclcpp::Service<motors::srv::ReadMotors>::SharedPtr read_motors_service_;
-    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr left_publisher_, right_publisher_;
-    rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr left_subscription_, right_subscription_;
+    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr left_leg_publisher_, right_leg_publisher_,
+        left_arm_publisher_, right_arm_publisher_;
+    rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr left_leg_subscription_,
+        right_leg_subscription_, left_arm_subscription_, right_arm_subscription_;
     rclcpp::TimerBase::SharedPtr timer_;
 };
 
