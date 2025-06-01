@@ -3,14 +3,15 @@
 
 // extern std::shared_ptr<spdlog::logger> motor_logger;
 
-DmMotorDriver::DmMotorDriver(uint16_t motor_id, std::string can_interface)
+DmMotorDriver::DmMotorDriver(uint16_t motor_id, std::string can_interface, uint16_t master_id_offset)
     : MotorDriver(), can_(SocketCAN::get(can_interface)) {
     motor_id_ = motor_id;
+    master_id_ = motor_id_ + master_id_offset;
     CanCbkFunc can_callback = std::bind(&DmMotorDriver::CanRxMsgCallback, this, std::placeholders::_1);
-    can_->add_can_callback(can_callback, motor_id_);
+    can_->add_can_callback(can_callback, master_id_);
 }
 
-DmMotorDriver::~DmMotorDriver() { can_->remove_can_callback(motor_id_); }
+DmMotorDriver::~DmMotorDriver() { can_->remove_can_callback(master_id_); }
 
 void DmMotorDriver::MotorLock() {
     can_frame tx_frame;
@@ -128,14 +129,14 @@ void DmMotorDriver::CanRxMsgCallback(const can_frame& rx_frame) {
         std::lock_guard<std::mutex> lock(mutex_);
         response_count--;
     }
-    uint16_t motor_id_t = 0;
+    uint16_t master_id_t = 0;
     uint16_t pos_int = 0;
     uint16_t spd_int = 0;
     uint16_t t_int = 0;
     pos_int = rx_frame.data[1] << 8 | rx_frame.data[2];
     spd_int = rx_frame.data[3] << 4 | (rx_frame.data[4] & 0xF0) >> 4;
     t_int = (rx_frame.data[4] & 0x0F) << 8 | rx_frame.data[5];
-    motor_id_t = (rx_frame.data[0] & 0x0F);
+    master_id_t = rx_frame.can_id;
     if ((rx_frame.data[0] & 0xF0) >> 4 > 7) {  // error code range from 8 to 15
         error_id_ = (rx_frame.data[0] & 0xF0) >> 4;
     }

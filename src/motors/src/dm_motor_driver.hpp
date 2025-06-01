@@ -18,7 +18,7 @@ enum DMError {
 
 class DmMotorDriver : public MotorDriver {
    public:
-    DmMotorDriver(uint16_t motor_id, std::string can_interface);
+    DmMotorDriver(uint16_t motor_id, std::string can_interface, uint16_t master_id_offset = 16);
     ~DmMotorDriver();
 
     virtual void MotorLock() override;
@@ -61,7 +61,6 @@ class DmMotorDriver : public MotorDriver {
     const float kSpdMax = 30.0f;
     const float kTorqueMin = -10.0f;
     const float kTorqueMax = 10.0f;
-    uint8_t master_id_ = 0;
     uint8_t mos_temperature_ = 0;
     float pos_max_;                  // dm 12 位置映射最大值
     float vel_max_;                  // dm 13 速度映射最大值

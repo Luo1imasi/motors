@@ -84,7 +84,7 @@ inline double l2norm(const T& a, const T& b) {
 }
 
 inline std::shared_ptr<spdlog::logger> setup_logger(std::vector<spdlog::sink_ptr> sinks,
-                                                    const std::string& logger_name = "airbot") {
+                                                    const std::string& logger_name = "humanoid") {
     auto logger = spdlog::get(logger_name);
     if (!logger) {
         if (sinks.size() > 0) {

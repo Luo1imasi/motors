@@ -55,7 +55,8 @@ class MotorDriver {
     virtual ~MotorDriver() = default;
 
     static std::shared_ptr<MotorDriver> MotorCreate(uint16_t motor_id, const char* interface,
-                                                    const std::string type = std::string("OD"));
+                                                    const std::string type = std::string("DM"),
+                                                    uint16_t master_id_offset = 0);
 
     virtual void CanRxMsgCallback(const can_frame& rx_frame) = 0;
     /**
@@ -348,6 +349,7 @@ class MotorDriver {
    protected:
     std::shared_ptr<spdlog::logger> logger_;
     uint16_t motor_id_;
+    uint16_t master_id_;
     float max_current_ = 15.f;
 
     uint8_t motor_control_mode_;  // 0:none 1:pos 2:spd 3:mit

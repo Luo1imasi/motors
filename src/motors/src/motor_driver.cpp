@@ -12,9 +12,9 @@ MotorDriver::MotorDriver() {
     logger_ = setup_logger(sinks);
 }
 std::shared_ptr<MotorDriver> MotorDriver::MotorCreate(uint16_t motor_id, const char* interface,
-                                                      const std::string type) {
+                                                      const std::string type, uint16_t master_id_offset) {
     if (type == "DM") {
-        return std::make_shared<DmMotorDriver>(motor_id, interface);
+        return std::make_shared<DmMotorDriver>(motor_id, interface, master_id_offset);
     } else {
         throw std::runtime_error("Motor type not supported");
     }

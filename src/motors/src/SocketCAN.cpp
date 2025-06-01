@@ -60,7 +60,7 @@ void SocketCAN::open(std::string interface) {
                 if (len < 0) {
                     continue;
                 }
-                auto it = can_callback_list_.find((CanCbkId)(rx_frame.data[0] & 0x0F));
+                auto it = can_callback_list_.find((CanCbkId)(rx_frame.can_id));
                 if (it != can_callback_list_.end()) {
                     std::lock_guard<std::mutex> lock(can_callback_mutex_);
                     it->second(rx_frame);
