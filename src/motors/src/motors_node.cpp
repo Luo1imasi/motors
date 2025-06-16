@@ -9,7 +9,7 @@
 
 class MotorsNode : public rclcpp::Node {
    public:
-    std::vector<float> kp_, kd_, motor_left_offset_, motor_right_offset_;
+    std::vector<float> kp_, kd_, motor_default_angle_;
     int can0_startID_, can0_endID_, can1_startID_, can1_endID_, can2_startID_, can2_endID_, can3_startID_,
         can3_endID_, can0_masterID_offset_, can1_masterID_offset_, can2_masterID_offset_,
         can3_masterID_offset_;
@@ -17,8 +17,7 @@ class MotorsNode : public rclcpp::Node {
     MotorsNode() : Node("motors_node") {
         kp_.resize(12);
         kd_.resize(12);
-        motor_left_offset_.resize(11);
-        motor_right_offset_.resize(12);
+        motor_default_angle_.resize(23);
 
         this->declare_parameter<std::vector<float>>(
             "kp",
@@ -62,27 +61,25 @@ class MotorsNode : public rclcpp::Node {
         this->get_parameter("can1_masterID_offset", can1_masterID_offset_);
         this->get_parameter("can2_masterID_offset", can2_masterID_offset_);
         this->get_parameter("can3_masterID_offset", can3_masterID_offset_);
-        this->get_parameter("motor_left_offset", tmp);
-        std::transform(tmp.begin(), tmp.end(), motor_left_offset_.begin(),
-                       [](double val) { return static_cast<float>(val); });
-        this->get_parameter("motor_right_offset", tmp);
-        std::transform(tmp.begin(), tmp.end(), motor_right_offset_.begin(),
+        this->get_parameter("motor_default_angle", tmp);
+        std::transform(tmp.begin(), tmp.end(), motor_default_angle_.begin(),
                        [](double val) { return static_cast<float>(val); });
 
         RCLCPP_INFO(this->get_logger(), "kp: %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f", kp_[0], kp_[1],
                     kp_[2], kp_[3], kp_[4], kp_[5], kp_[6], kp_[7], kp_[8], kp_[9], kp_[10], kp_[11]);
         RCLCPP_INFO(this->get_logger(), "kd: %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f", kd_[0], kd_[1],
                     kd_[2], kd_[3], kd_[4], kd_[5], kd_[6], kd_[7], kd_[8], kd_[9], kd_[10], kd_[11]);
-        RCLCPP_INFO(this->get_logger(), "motor_left_offset: %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f",
-                    motor_left_offset_[0], motor_left_offset_[1], motor_left_offset_[2],
-                    motor_left_offset_[3], motor_left_offset_[4], motor_left_offset_[5],
-                    motor_left_offset_[6], motor_left_offset_[7], motor_left_offset_[8],
-                    motor_left_offset_[9], motor_left_offset_[10]);
-        RCLCPP_INFO(this->get_logger(), "motor_right_offset: %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f",
-                    motor_right_offset_[0], motor_right_offset_[1], motor_right_offset_[2],
-                    motor_right_offset_[3], motor_right_offset_[4], motor_right_offset_[5],
-                    motor_right_offset_[6], motor_right_offset_[7], motor_right_offset_[8],
-                    motor_right_offset_[9], motor_right_offset_[10], motor_right_offset_[11]);
+        RCLCPP_INFO(this->get_logger(),
+                    "motor_default_angle: %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, "
+                    "%f, %f, %f, %f, %f, %f, %f",
+                    motor_default_angle_[0], motor_default_angle_[1], motor_default_angle_[2],
+                    motor_default_angle_[3], motor_default_angle_[4], motor_default_angle_[5],
+                    motor_default_angle_[6], motor_default_angle_[7], motor_default_angle_[8],
+                    motor_default_angle_[9], motor_default_angle_[10], motor_default_angle_[11],
+                    motor_default_angle_[12], motor_default_angle_[13], motor_default_angle_[14],
+                    motor_default_angle_[15], motor_default_angle_[16], motor_default_angle_[17],
+                    motor_default_angle_[18], motor_default_angle_[19], motor_default_angle_[20],
+                    motor_default_angle_[21], motor_default_angle_[22]);
         RCLCPP_INFO(this->get_logger(), "can0_startID: %d", can0_startID_);
         RCLCPP_INFO(this->get_logger(), "can0_endID: %d", can0_endID_);
         RCLCPP_INFO(this->get_logger(), "can1_startID: %d", can1_startID_);
@@ -313,47 +310,47 @@ class MotorsNode : public rclcpp::Node {
             {
                 std::scoped_lock lock(left_leg_mutex_, right_leg_mutex_, left_arm_mutex_, right_arm_mutex_);
                 for (int i = can0_startID_; i <= can0_endID_; i++) {
-                    left_leg_motors[i - can0_startID_]->MotorMitModeCmd(motor_left_offset_[i - can0_startID_],
-                                                                        0, 20, 2, 0);
+                    left_leg_motors[i - can0_startID_]->MotorMitModeCmd(
+                        motor_default_angle_[i - can0_startID_], 0, 20, 2, 0);
                     Timer::ThreadSleepFor(1);
                 }
                 for (int i = can1_startID_; i <= can1_endID_; i++) {
                     right_leg_motors[i - can1_startID_]->MotorMitModeCmd(
-                        motor_right_offset_[i - can1_startID_], 0, 20, 2, 0);
+                        motor_default_angle_[i - can1_startID_ + 6], 0, 20, 2, 0);
                     Timer::ThreadSleepFor(1);
                 }
                 for (int i = can2_startID_; i <= can2_endID_; i++) {
                     left_arm_motors[i - can2_startID_]->MotorMitModeCmd(
-                        motor_left_offset_[i - can2_startID_ + 6], 0, 20, 2, 0);
+                        motor_default_angle_[i - can2_startID_ + 13], 0, 20, 2, 0);
                     Timer::ThreadSleepFor(1);
                 }
                 for (int i = can3_startID_; i <= can3_endID_; i++) {
                     right_arm_motors[i - can3_startID_]->MotorMitModeCmd(
-                        motor_right_offset_[i - can3_startID_ + 7], 0, 20, 2, 0);
+                        motor_default_angle_[i - can3_startID_ + 18], 0, 20, 2, 0);
                     Timer::ThreadSleepFor(1);
                 }
                 Timer::ThreadSleepFor(2000);
                 for (int i = can0_startID_; i <= can0_endID_; i++) {
-                    left_leg_motors[i - can0_startID_]->MotorMitModeCmd(motor_left_offset_[i - can0_startID_],
-                                                                        0, kp_[i - can0_startID_],
-                                                                        kd_[i - can0_startID_], 0);
+                    left_leg_motors[i - can0_startID_]->MotorMitModeCmd(
+                        motor_default_angle_[i - can0_startID_], 0, kp_[i - can0_startID_],
+                        kd_[i - can0_startID_], 0);
                     Timer::ThreadSleepFor(1);
                 }
                 for (int i = can1_startID_; i <= can1_endID_; i++) {
                     right_leg_motors[i - can1_startID_]->MotorMitModeCmd(
-                        motor_right_offset_[i - can1_startID_], 0, kp_[i - can1_startID_],
+                        motor_default_angle_[i - can1_startID_ + 6], 0, kp_[i - can1_startID_],
                         kd_[i - can1_startID_], 0);
                     Timer::ThreadSleepFor(1);
                 }
                 for (int i = can2_startID_; i <= can2_endID_; i++) {
                     left_arm_motors[i - can2_startID_]->MotorMitModeCmd(
-                        motor_left_offset_[i - can2_startID_ + 6], 0, kp_[i - can2_startID_ + 7],
+                        motor_default_angle_[i - can2_startID_ + 13], 0, kp_[i - can2_startID_ + 7],
                         kd_[i - can2_startID_ + 7], 0);
                     Timer::ThreadSleepFor(1);
                 }
                 for (int i = can3_startID_; i <= can3_endID_; i++) {
                     right_arm_motors[i - can3_startID_]->MotorMitModeCmd(
-                        motor_right_offset_[i - can3_startID_ + 7], 0, kp_[i - can3_startID_ + 7],
+                        motor_default_angle_[i - can3_startID_ + 18], 0, kp_[i - can3_startID_ + 7],
                         kd_[i - can3_startID_ + 7], 0);
                     Timer::ThreadSleepFor(1);
                 }
