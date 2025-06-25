@@ -193,9 +193,12 @@ class MotorsNode : public rclcpp::Node {
         auto left_message = sensor_msgs::msg::JointState();
         left_message.header.stamp = this->now();
         left_message.name = {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6"};
-        left_message.position = {left_leg_motors[0]->get_motor_pos(), left_leg_motors[1]->get_motor_pos(),
-                                 left_leg_motors[2]->get_motor_pos(), left_leg_motors[3]->get_motor_pos(),
-                                 left_leg_motors[4]->get_motor_pos(), left_leg_motors[5]->get_motor_pos()};
+        left_message.position = {left_leg_motors[0]->get_motor_pos() - motor_default_angle_[0],
+                                 left_leg_motors[1]->get_motor_pos() - motor_default_angle_[1],
+                                 left_leg_motors[2]->get_motor_pos() - motor_default_angle_[2],
+                                 left_leg_motors[3]->get_motor_pos() - motor_default_angle_[3],
+                                 left_leg_motors[4]->get_motor_pos() - motor_default_angle_[4],
+                                 left_leg_motors[5]->get_motor_pos() - motor_default_angle_[5]};
         left_message.velocity = {left_leg_motors[0]->get_motor_spd(), left_leg_motors[1]->get_motor_spd(),
                                  left_leg_motors[2]->get_motor_spd(), left_leg_motors[3]->get_motor_spd(),
                                  left_leg_motors[4]->get_motor_spd(), left_leg_motors[5]->get_motor_spd()};
@@ -210,10 +213,13 @@ class MotorsNode : public rclcpp::Node {
         auto right_message = sensor_msgs::msg::JointState();
         right_message.header.stamp = this->now();
         right_message.name = {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6", "joint7"};
-        right_message.position = {right_leg_motors[0]->get_motor_pos(), right_leg_motors[1]->get_motor_pos(),
-                                  right_leg_motors[2]->get_motor_pos(), right_leg_motors[3]->get_motor_pos(),
-                                  right_leg_motors[4]->get_motor_pos(), right_leg_motors[5]->get_motor_pos(),
-                                  right_leg_motors[6]->get_motor_pos()};
+        right_message.position = {right_leg_motors[0]->get_motor_pos() - motor_default_angle_[6],
+                                  right_leg_motors[1]->get_motor_pos() - motor_default_angle_[7],
+                                  right_leg_motors[2]->get_motor_pos() - motor_default_angle_[8],
+                                  right_leg_motors[3]->get_motor_pos() - motor_default_angle_[9],
+                                  right_leg_motors[4]->get_motor_pos() - motor_default_angle_[10],
+                                  right_leg_motors[5]->get_motor_pos() - motor_default_angle_[11],
+                                  right_leg_motors[6]->get_motor_pos() - motor_default_angle_[12]};
         right_message.velocity = {right_leg_motors[0]->get_motor_spd(), right_leg_motors[1]->get_motor_spd(),
                                   right_leg_motors[2]->get_motor_spd(), right_leg_motors[3]->get_motor_spd(),
                                   right_leg_motors[4]->get_motor_spd(), right_leg_motors[5]->get_motor_spd(),
@@ -230,9 +236,11 @@ class MotorsNode : public rclcpp::Node {
         auto left_message = sensor_msgs::msg::JointState();
         left_message.header.stamp = this->now();
         left_message.name = {"joint1", "joint2", "joint3", "joint4", "joint5"};
-        left_message.position = {left_arm_motors[0]->get_motor_pos(), left_arm_motors[1]->get_motor_pos(),
-                                 left_arm_motors[2]->get_motor_pos(), left_arm_motors[3]->get_motor_pos(),
-                                 left_arm_motors[4]->get_motor_pos()};
+        left_message.position = {left_arm_motors[0]->get_motor_pos() - motor_default_angle_[13],
+                                 left_arm_motors[1]->get_motor_pos() - motor_default_angle_[14],
+                                 left_arm_motors[2]->get_motor_pos() - motor_default_angle_[15],
+                                 left_arm_motors[3]->get_motor_pos() - motor_default_angle_[16],
+                                 left_arm_motors[4]->get_motor_pos() - motor_default_angle_[17]};
         left_message.velocity = {left_arm_motors[0]->get_motor_spd(), left_arm_motors[1]->get_motor_spd(),
                                  left_arm_motors[2]->get_motor_spd(), left_arm_motors[3]->get_motor_spd(),
                                  left_arm_motors[4]->get_motor_spd()};
@@ -247,9 +255,11 @@ class MotorsNode : public rclcpp::Node {
         auto right_message = sensor_msgs::msg::JointState();
         right_message.header.stamp = this->now();
         right_message.name = {"joint1", "joint2", "joint3", "joint4", "joint5"};
-        right_message.position = {right_arm_motors[0]->get_motor_pos(), right_arm_motors[1]->get_motor_pos(),
-                                  right_arm_motors[2]->get_motor_pos(), right_arm_motors[3]->get_motor_pos(),
-                                  right_arm_motors[4]->get_motor_pos()};
+        right_message.position = {right_arm_motors[0]->get_motor_pos() - motor_default_angle_[18],
+                                  right_arm_motors[1]->get_motor_pos() - motor_default_angle_[19],
+                                  right_arm_motors[2]->get_motor_pos() - motor_default_angle_[20],
+                                  right_arm_motors[3]->get_motor_pos() - motor_default_angle_[21],
+                                  right_arm_motors[4]->get_motor_pos() - motor_default_angle_[22]};
         right_message.velocity = {right_arm_motors[0]->get_motor_spd(), right_arm_motors[1]->get_motor_spd(),
                                   right_arm_motors[2]->get_motor_spd(), right_arm_motors[3]->get_motor_spd(),
                                   right_arm_motors[4]->get_motor_spd()};
@@ -264,8 +274,9 @@ class MotorsNode : public rclcpp::Node {
         std::unique_lock lock(left_leg_mutex_);
         for (int i = can0_startID_; i <= can0_endID_; i++) {
             left_leg_motors[i - can0_startID_]->MotorMitModeCmd(
-                msg->position[i - can0_startID_], msg->velocity[i - can0_startID_], kp_[i - can0_startID_],
-                kd_[i - can0_startID_], msg->effort[i - can0_startID_]);
+                msg->position[i - can0_startID_] + motor_default_angle_[i - can0_startID_],
+                msg->velocity[i - can0_startID_], kp_[i - can0_startID_], kd_[i - can0_startID_],
+                msg->effort[i - can0_startID_]);
             Timer::ThreadSleepForUs(200);
         }
         publish_left_leg();
@@ -275,8 +286,9 @@ class MotorsNode : public rclcpp::Node {
         std::unique_lock lock(right_leg_mutex_);
         for (int i = can1_startID_; i <= can1_endID_; i++) {
             right_leg_motors[i - can1_startID_]->MotorMitModeCmd(
-                msg->position[i - can1_startID_], msg->velocity[i - can1_startID_], kp_[i - can1_startID_],
-                kd_[i - can1_startID_], msg->effort[i - can1_startID_]);
+                msg->position[i - can1_startID_] + motor_default_angle_[i - can1_startID_ + 6],
+                msg->velocity[i - can1_startID_], kp_[i - can1_startID_], kd_[i - can1_startID_],
+                msg->effort[i - can1_startID_]);
             Timer::ThreadSleepForUs(200);
         }
         publish_right_leg();
@@ -286,8 +298,9 @@ class MotorsNode : public rclcpp::Node {
         std::unique_lock lock(left_arm_mutex_);
         for (int i = can2_startID_; i <= can2_endID_; i++) {
             left_arm_motors[i - can2_startID_]->MotorMitModeCmd(
-                msg->position[i - can2_startID_], msg->velocity[i - can2_startID_],
-                kp_[i - can2_startID_ + 7], kd_[i - can2_startID_ + 7], msg->effort[i - can2_startID_]);
+                msg->position[i - can2_startID_] + motor_default_angle_[i - can2_startID_ + 13],
+                msg->velocity[i - can2_startID_], kp_[i - can2_startID_ + 7], kd_[i - can2_startID_ + 7],
+                msg->effort[i - can2_startID_]);
             Timer::ThreadSleepForUs(200);
         }
         publish_left_arm();
@@ -297,8 +310,9 @@ class MotorsNode : public rclcpp::Node {
         std::unique_lock lock(right_arm_mutex_);
         for (int i = can3_startID_; i <= can3_endID_; i++) {
             right_arm_motors[i - can3_startID_]->MotorMitModeCmd(
-                msg->position[i - can3_startID_], msg->velocity[i - can3_startID_],
-                kp_[i - can3_startID_ + 7], kd_[i - can3_startID_ + 7], msg->effort[i - can3_startID_]);
+                msg->position[i - can3_startID_] + motor_default_angle_[i - can3_startID_ + 18],
+                msg->velocity[i - can3_startID_], kp_[i - can3_startID_ + 7], kd_[i - can3_startID_ + 7],
+                msg->effort[i - can3_startID_]);
             Timer::ThreadSleepForUs(200);
         }
         publish_right_arm();
