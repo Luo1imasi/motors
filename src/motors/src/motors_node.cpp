@@ -41,6 +41,10 @@ class MotorsNode : public rclcpp::Node {
         this->declare_parameter<std::vector<float>>(
             "motor_right_offset",
             std::vector<float>{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+        this->declare_parameter<std::vector<float>>(
+            "motor_default_angle",
+            std::vector<float>{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                               0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
 
         std::vector<double> tmp;
         this->get_parameter("kp", tmp);
