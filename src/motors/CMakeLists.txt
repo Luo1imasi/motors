@@ -18,6 +18,7 @@ find_package(sensor_msgs REQUIRED)
 find_package(Boost COMPONENTS system)
 find_package(spdlog REQUIRED)
 find_package(fmt REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/ControlMotor.srv"
@@ -31,7 +32,7 @@ add_library(dm_motors SHARED
   src/SocketCAN.cpp
 )
 set(PUBLIC_DEPENDENCIES
-    fmt::fmt spdlog::spdlog ${Boost_LIBRARIES} pthread)
+    fmt::fmt spdlog::spdlog ${Boost_LIBRARIES} pthread Eigen3::Eigen)
 target_include_directories(dm_motors
   PUBLIC 
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
@@ -39,7 +40,9 @@ target_include_directories(dm_motors
 )
 target_link_libraries(dm_motors PUBLIC ${PUBLIC_DEPENDENCIES})
 
-add_executable(${PROJECT_NAME}_node src/motors_node.cpp)
+add_executable(${PROJECT_NAME}_node 
+                src/motors_node.cpp
+                src/close_chain_mapping.cpp)
 target_include_directories(${PROJECT_NAME}_node
   PUBLIC 
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
