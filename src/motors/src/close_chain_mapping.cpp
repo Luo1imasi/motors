@@ -62,21 +62,20 @@ Decouple::inverse_kinematics(
     double q_pitch, bool leftLegFlag)
 {
     InsKinematicsResult result;
-    bool legal_ori = true;
 
     result.THETA = Eigen::Vector2d::Zero();
 
     double l_bar = 20; // # up
 
     double l_rod[2] = {180, 110}; // # long rod
-    double l_spacing = 42.35 ? leftLegFlag : -42.35; // # spacing between legs
+    double l_spacing = leftLegFlag ? 42.35 : -42.35;  // # spacing between legs
 
     double short_link_angle_0 = 0 * M_PI / 180;
     double long_link_angle_0 = 180 * M_PI / 180;
 
-    double r_B1_0_x = -l_bar * cos(long_link_angle_0);
+    double r_B1_0_x = l_bar * cos(long_link_angle_0);
     double r_B1_0_z = 180 - l_bar * sin(long_link_angle_0);
-    double r_B2_0_x = -l_bar * cos(short_link_angle_0);
+    double r_B2_0_x = l_bar * cos(short_link_angle_0);
     double r_B2_0_z = 110 - l_bar * sin(short_link_angle_0);
 
     // Define points
@@ -84,9 +83,9 @@ Decouple::inverse_kinematics(
     Eigen::Vector3d r_B1_0{r_B1_0_x, l_spacing, r_B1_0_z};
     Eigen::Vector3d r_C1_0{-20, l_spacing, 0};
 
-    Eigen::Vector3d r_A2_0{0, -l_spacing, 110};
-    Eigen::Vector3d r_B2_0{r_B2_0_x, -l_spacing, r_B2_0_z};
-    Eigen::Vector3d r_C2_0{20, -l_spacing, 0};
+    Eigen::Vector3d r_A2_0{0, l_spacing, 110};
+    Eigen::Vector3d r_B2_0{r_B2_0_x, l_spacing, r_B2_0_z};
+    Eigen::Vector3d r_C2_0{20, l_spacing, 0};
 
     std::vector<Eigen::Vector3d> r_A_0;
     r_A_0.push_back(r_A1_0);
@@ -122,25 +121,14 @@ Decouple::inverse_kinematics(
         Eigen::Vector3d r_C_i = x_rot * r_C_0[i];
         Eigen::Vector3d rBA_bar = r_B_0[i] - r_A_0[i];
 
-        Eigen::Vector3d r_AB_0 = r_B_0[i] - r_A_0[i];
-        Eigen::Vector3d r_CA = r_A_i - r_C_i;
+        double a = r_C_i[0] - r_A_i[0];
+        double b = r_A_i[2] - r_C_i[2];
+        double c = (pow(l_rod[i], 2) - pow(l_bar, 2) - pow((r_C_i - r_A_i).norm(), 2)) / (2 * l_bar);
 
-        double M = pow(l_rod[i], 2) - pow(r_CA.norm(), 2) - pow(l_bar, 2);
-        double N = r_CA[0] * r_AB_0[0] + r_CA[2] * r_AB_0[2];
-        double K = r_CA[0] * r_AB_0[2] - r_CA[2] * r_AB_0[0];
-
-        double a = 4 * (pow(K, 2) + pow(N, 2));
-        double b = -4 * M * K;
-        double c = pow(M, 2) - 4 * pow(N, 2);
-        double theta_i = 0.0;
-        if (pow(b, 2) - 4 * a * c < 0.0) // to visualize the working space later
-        {
-            theta_i = 0.0;
-            legal_ori = false;
-            // printf("input ankle joint ori is outof ranges!! leg: %d, roll: %f, pitch: %f\n", i, q_roll, q_pitch);
-        }
-        else
-            theta_i = std::asin((-b + sqrt(pow(b, 2) - 4 * a * c)) / (2 * a));
+        double theta_i =
+            asin((b * c + sqrt(pow(b * c, 2) - (pow(a, 2) + pow(b, 2)) * (pow(c, 2) - pow(a, 2)))) /
+                 (pow(a, 2) + pow(b, 2)));
+        theta_i = a < 0 ? theta_i : -theta_i;
 
         Eigen::Matrix3d R_y_theta = Eigen::Matrix3d::Zero();
         R_y_theta << std::cos(theta_i), 0, std::sin(theta_i),
@@ -213,6 +201,7 @@ std::pair<Eigen::Vector2d, std::vector<Eigen::MatrixXd>>
 Decouple::getDecouple(double roll, double pitch, bool leftLegFlag)
 {
     InsKinematicsResult kinematics = inverse_kinematics(roll, pitch, leftLegFlag);
+    // printKinematicsResult(kinematics);
     std::vector<Eigen::MatrixXd> Jac = jacobian(kinematics.r_C, kinematics.r_bar, kinematics.r_rod, pitch);
     return {kinematics.THETA, Jac};
 }
@@ -282,7 +271,7 @@ void Decouple::getDecoupleQVT(Eigen::VectorXd &q, Eigen::VectorXd &vel, Eigen::V
     Pitch = q[0]; // rotation axis [0 1 0]
     Roll = q[1];
 
-    std::pair<Eigen::Vector2d, std::vector<Eigen::MatrixXd>> motor; // 联立顺序：先right后left
+    std::pair<Eigen::Vector2d, std::vector<Eigen::MatrixXd>> motor;
 
     motor = getDecouple(Roll, Pitch, leftLegFlag);
     q.segment<2>(0) = motor.first;
