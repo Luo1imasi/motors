@@ -24,6 +24,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/ControlMotor.srv"
   "srv/ResetMotors.srv"
   "srv/ReadMotors.srv"
+  "srv/SetZeros.srv"
 )
 
 add_library(dm_motors SHARED 
