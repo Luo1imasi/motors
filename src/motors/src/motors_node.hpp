@@ -1,0 +1,219 @@
+#pragma once
+#include <chrono>
+#include <motors/srv/control_motor.hpp>
+#include <motors/srv/read_motors.hpp>
+#include <motors/srv/reset_motors.hpp>
+#include <motors/srv/set_zeros.hpp>
+#include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
+
+#include "close_chain_mapping.hpp"
+#include "motor_driver.hpp"
+#include "timer.hpp"
+
+class MotorsNode : public rclcpp::Node {
+   public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    MotorsNode() : Node("motors_node") {
+        kp_.resize(12);
+        kd_.resize(12);
+        joint_default_angle_.resize(23);
+        ankle_decouple_ = std::make_shared<Decouple>();
+
+        this->declare_parameter<std::vector<float>>(
+            "kp",
+            std::vector<float>{100.0, 150.0, 100.0, 150.0, 40.0, 40.0, 100.0, 40.0, 40.0, 40.0, 40.0, 40.0});
+        this->declare_parameter<std::vector<float>>(
+            "kd", std::vector<float>{4.0, 5.0, 4.0, 5.0, 3.0, 3.0, 4.0, 3.0, 3.0, 3.0, 3.0, 3.0});
+        this->declare_parameter<int>("can0_startID", 0);
+        this->declare_parameter<int>("can0_endID", 0);
+        this->declare_parameter<int>("can1_startID", 0);
+        this->declare_parameter<int>("can1_endID", 0);
+        this->declare_parameter<int>("can2_startID", 0);
+        this->declare_parameter<int>("can2_endID", 0);
+        this->declare_parameter<int>("can3_startID", 0);
+        this->declare_parameter<int>("can3_endID", 0);
+        this->declare_parameter<int>("can0_masterID_offset", 0);
+        this->declare_parameter<int>("can1_masterID_offset", 0);
+        this->declare_parameter<int>("can2_masterID_offset", 0);
+        this->declare_parameter<int>("can3_masterID_offset", 0);
+        this->declare_parameter<std::vector<float>>(
+            "joint_default_angle",
+            std::vector<float>{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                               0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+
+        std::vector<double> tmp;
+        this->get_parameter("kp", tmp);
+        std::transform(tmp.begin(), tmp.end(), kp_.begin(),
+                       [](double val) { return static_cast<float>(val); });
+        this->get_parameter("kd", tmp);
+        std::transform(tmp.begin(), tmp.end(), kd_.begin(),
+                       [](double val) { return static_cast<float>(val); });
+        this->get_parameter("can0_startID", can0_startID_);
+        this->get_parameter("can0_endID", can0_endID_);
+        this->get_parameter("can1_startID", can1_startID_);
+        this->get_parameter("can1_endID", can1_endID_);
+        this->get_parameter("can2_startID", can2_startID_);
+        this->get_parameter("can2_endID", can2_endID_);
+        this->get_parameter("can3_startID", can3_startID_);
+        this->get_parameter("can3_endID", can3_endID_);
+        this->get_parameter("can0_masterID_offset", can0_masterID_offset_);
+        this->get_parameter("can1_masterID_offset", can1_masterID_offset_);
+        this->get_parameter("can2_masterID_offset", can2_masterID_offset_);
+        this->get_parameter("can3_masterID_offset", can3_masterID_offset_);
+        this->get_parameter("joint_default_angle", tmp);
+        std::transform(tmp.begin(), tmp.end(), joint_default_angle_.begin(),
+                       [](double val) { return static_cast<float>(val); });
+
+        RCLCPP_INFO(this->get_logger(), "kp: %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f", kp_[0], kp_[1],
+                    kp_[2], kp_[3], kp_[4], kp_[5], kp_[6], kp_[7], kp_[8], kp_[9], kp_[10], kp_[11]);
+        RCLCPP_INFO(this->get_logger(), "kd: %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f", kd_[0], kd_[1],
+                    kd_[2], kd_[3], kd_[4], kd_[5], kd_[6], kd_[7], kd_[8], kd_[9], kd_[10], kd_[11]);
+        RCLCPP_INFO(this->get_logger(),
+                    "joint_default_angle: %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, "
+                    "%f, %f, %f, %f, %f, %f, %f",
+                    joint_default_angle_[0], joint_default_angle_[1], joint_default_angle_[2],
+                    joint_default_angle_[3], joint_default_angle_[4], joint_default_angle_[5],
+                    joint_default_angle_[6], joint_default_angle_[7], joint_default_angle_[8],
+                    joint_default_angle_[9], joint_default_angle_[10], joint_default_angle_[11],
+                    joint_default_angle_[12], joint_default_angle_[13], joint_default_angle_[14],
+                    joint_default_angle_[15], joint_default_angle_[16], joint_default_angle_[17],
+                    joint_default_angle_[18], joint_default_angle_[19], joint_default_angle_[20],
+                    joint_default_angle_[21], joint_default_angle_[22]);
+        RCLCPP_INFO(this->get_logger(), "can0_startID: %d", can0_startID_);
+        RCLCPP_INFO(this->get_logger(), "can0_endID: %d", can0_endID_);
+        RCLCPP_INFO(this->get_logger(), "can1_startID: %d", can1_startID_);
+        RCLCPP_INFO(this->get_logger(), "can1_endID: %d", can1_endID_);
+        RCLCPP_INFO(this->get_logger(), "can2_startID: %d", can2_startID_);
+        RCLCPP_INFO(this->get_logger(), "can2_endID: %d", can2_endID_);
+        RCLCPP_INFO(this->get_logger(), "can3_startID: %d", can3_startID_);
+        RCLCPP_INFO(this->get_logger(), "can3_endID: %d", can3_endID_);
+        RCLCPP_INFO(this->get_logger(), "can0_masterID_offset: %d", can0_masterID_offset_);
+        RCLCPP_INFO(this->get_logger(), "can1_masterID_offset: %d", can1_masterID_offset_);
+        RCLCPP_INFO(this->get_logger(), "can2_masterID_offset: %d", can2_masterID_offset_);
+        RCLCPP_INFO(this->get_logger(), "can3_masterID_offset: %d", can3_masterID_offset_);
+
+        left_ankle_motors_default_angle_.resize(2);
+        right_ankle_motors_default_angle_.resize(2);
+        left_ankle_motors_default_angle_ << joint_default_angle_[4], joint_default_angle_[5];
+        right_ankle_motors_default_angle_ << joint_default_angle_[10], joint_default_angle_[11];
+        Eigen::VectorXd vel = Eigen::VectorXd::Zero(2);
+        Eigen::VectorXd tau = Eigen::VectorXd::Zero(2);
+        ankle_decouple_->getDecoupleQVT(left_ankle_motors_default_angle_, vel, tau, true);
+        ankle_decouple_->getDecoupleQVT(right_ankle_motors_default_angle_, vel, tau, false);
+
+        for (int i = can0_startID_; i <= can0_endID_; i++) {
+            left_leg_motors[i - can0_startID_] =
+                MotorDriver::MotorCreate(i, "can0", "DM", can0_masterID_offset_);
+            left_leg_motors[i - can0_startID_]->MotorInit();
+            Timer::ThreadSleepFor(1);
+        }
+        for (int i = can1_startID_; i <= can1_endID_; i++) {
+            right_leg_motors[i - can1_startID_] =
+                MotorDriver::MotorCreate(i, "can1", "DM", can1_masterID_offset_);
+            right_leg_motors[i - can1_startID_]->MotorInit();
+            Timer::ThreadSleepFor(1);
+        }
+        for (int i = can2_startID_; i <= can2_endID_; i++) {
+            left_arm_motors[i - can2_startID_] =
+                MotorDriver::MotorCreate(i, "can2", "DM", can2_masterID_offset_);
+            left_arm_motors[i - can2_startID_]->MotorInit();
+            Timer::ThreadSleepFor(1);
+        }
+        for (int i = can3_startID_; i <= can3_endID_; i++) {
+            right_arm_motors[i - can3_startID_] =
+                MotorDriver::MotorCreate(i, "can3", "DM", can3_masterID_offset_);
+            right_arm_motors[i - can3_startID_]->MotorInit();
+            Timer::ThreadSleepFor(1);
+        }
+        Timer::ThreadSleepFor(500);
+        left_leg_subscription_ = this->create_subscription<sensor_msgs::msg::JointState>(
+            "/joint_command_left_leg", 1,
+            std::bind(&MotorsNode::subs_left_leg_callback, this, std::placeholders::_1));
+        right_leg_subscription_ = this->create_subscription<sensor_msgs::msg::JointState>(
+            "/joint_command_right_leg", 1,
+            std::bind(&MotorsNode::subs_right_leg_callback, this, std::placeholders::_1));
+        left_arm_subscription_ = this->create_subscription<sensor_msgs::msg::JointState>(
+            "/joint_command_left_arm", 1,
+            std::bind(&MotorsNode::subs_left_arm_callback, this, std::placeholders::_1));
+        right_arm_subscription_ = this->create_subscription<sensor_msgs::msg::JointState>(
+            "/joint_command_right_arm", 1,
+            std::bind(&MotorsNode::subs_right_arm_callback, this, std::placeholders::_1));
+        left_leg_publisher_ =
+            this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_left_leg", 1);
+        right_leg_publisher_ =
+            this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_right_leg", 1);
+        left_arm_publisher_ =
+            this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_left_arm", 1);
+        right_arm_publisher_ =
+            this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_right_arm", 1);
+        control_motor_service_ = this->create_service<motors::srv::ControlMotor>(
+            "control_motor",
+            std::bind(&MotorsNode::control_motor, this, std::placeholders::_1, std::placeholders::_2));
+        reset_motors_service_ = this->create_service<motors::srv::ResetMotors>(
+            "reset_motors",
+            std::bind(&MotorsNode::reset_motors, this, std::placeholders::_1, std::placeholders::_2));
+        read_motors_service_ = this->create_service<motors::srv::ReadMotors>(
+            "read_motors",
+            std::bind(&MotorsNode::read_motors, this, std::placeholders::_1, std::placeholders::_2));
+        set_zeros_service_ = this->create_service<motors::srv::SetZeros>(
+            "set_zeros",
+            std::bind(&MotorsNode::set_zeros, this, std::placeholders::_1, std::placeholders::_2));
+    }
+    ~MotorsNode() {
+        std::scoped_lock lock(left_leg_mutex_, right_leg_mutex_, left_arm_mutex_, right_arm_mutex_);
+        for (int i = can0_startID_; i <= can0_endID_; i++) {
+            left_leg_motors[i - can0_startID_]->MotorDeInit();
+            Timer::ThreadSleepFor(1);
+        }
+        for (int i = can1_startID_; i <= can1_endID_; i++) {
+            right_leg_motors[i - can1_startID_]->MotorDeInit();
+            Timer::ThreadSleepFor(1);
+        }
+        for (int i = can2_startID_; i <= can2_endID_; i++) {
+            left_arm_motors[i - can2_startID_]->MotorDeInit();
+            Timer::ThreadSleepFor(1);
+        }
+        for (int i = can3_startID_; i <= can3_endID_; i++) {
+            right_arm_motors[i - can3_startID_]->MotorDeInit();
+            Timer::ThreadSleepFor(1);
+        }
+        RCLCPP_INFO(this->get_logger(), "Motors Deinitialized");
+    }
+    void publish_left_leg();
+    void publish_right_leg();
+    void publish_left_arm();
+    void publish_right_arm();
+    void subs_left_leg_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg);
+    void subs_right_leg_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg);
+    void subs_left_arm_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg);
+    void subs_right_arm_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg);
+    void reset_motors(const std::shared_ptr<motors::srv::ResetMotors::Request> request,
+                      std::shared_ptr<motors::srv::ResetMotors::Response> response);
+    void read_motors(const std::shared_ptr<motors::srv::ReadMotors::Request> request,
+                     std::shared_ptr<motors::srv::ReadMotors::Response> response);
+    void control_motor(const std::shared_ptr<motors::srv::ControlMotor::Request> request,
+                               std::shared_ptr<motors::srv::ControlMotor::Response> response);
+    void set_zeros(const std::shared_ptr<motors::srv::SetZeros::Request> request,
+                   std::shared_ptr<motors::srv::SetZeros::Response> response); 
+
+   private:
+    std::shared_ptr<MotorDriver> left_leg_motors[6], right_leg_motors[7], left_arm_motors[5],
+        right_arm_motors[5];
+    Eigen::VectorXd left_ankle_motors_default_angle_, right_ankle_motors_default_angle_;
+    std::vector<float> kp_, kd_, joint_default_angle_;
+    int can0_startID_, can0_endID_, can1_startID_, can1_endID_, can2_startID_, can2_endID_, can3_startID_,
+        can3_endID_, can0_masterID_offset_, can1_masterID_offset_, can2_masterID_offset_,
+        can3_masterID_offset_;
+    std::shared_mutex left_leg_mutex_, right_leg_mutex_, left_arm_mutex_, right_arm_mutex_;
+    rclcpp::Service<motors::srv::ControlMotor>::SharedPtr control_motor_service_;
+    rclcpp::Service<motors::srv::ResetMotors>::SharedPtr reset_motors_service_;
+    rclcpp::Service<motors::srv::ReadMotors>::SharedPtr read_motors_service_;
+    rclcpp::Service<motors::srv::SetZeros>::SharedPtr set_zeros_service_;
+    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr left_leg_publisher_, right_leg_publisher_,
+        left_arm_publisher_, right_arm_publisher_;
+    rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr left_leg_subscription_,
+        right_leg_subscription_, left_arm_subscription_, right_arm_subscription_;
+    rclcpp::TimerBase::SharedPtr timer_;
+    std::shared_ptr<Decouple> ankle_decouple_;
+};
