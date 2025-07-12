@@ -45,8 +45,8 @@ void MotorsNode::publish_right_leg() {
     right_message.name = {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6", "joint7"};
     right_message.position = {right_leg_motors[0]->get_motor_pos() - joint_default_angle_[6],
                               right_leg_motors[1]->get_motor_pos() - joint_default_angle_[7],
-                              -(right_leg_motors[2]->get_motor_pos() - joint_default_angle_[8]),
-                              -(right_leg_motors[3]->get_motor_pos() - joint_default_angle_[9]),
+                              -(right_leg_motors[2]->get_motor_pos() + joint_default_angle_[8]),
+                              -(right_leg_motors[3]->get_motor_pos() + joint_default_angle_[9]),
                               q[0] - joint_default_angle_[10],
                               q[1] - joint_default_angle_[11],
                               right_leg_motors[6]->get_motor_pos() - joint_default_angle_[12]};
@@ -89,10 +89,10 @@ void MotorsNode::publish_right_arm() {
     auto right_message = sensor_msgs::msg::JointState();
     right_message.header.stamp = this->now();
     right_message.name = {"joint1", "joint2", "joint3", "joint4", "joint5"};
-    right_message.position = {-(right_arm_motors[0]->get_motor_pos() - joint_default_angle_[18]),
+    right_message.position = {-(right_arm_motors[0]->get_motor_pos() + joint_default_angle_[18]),
                               right_arm_motors[1]->get_motor_pos() - joint_default_angle_[19],
                               right_arm_motors[2]->get_motor_pos() - joint_default_angle_[20],
-                              -(right_arm_motors[3]->get_motor_pos() - joint_default_angle_[21]),
+                              -(right_arm_motors[3]->get_motor_pos() + joint_default_angle_[21]),
                               right_arm_motors[4]->get_motor_pos() - joint_default_angle_[22]};
     right_message.velocity = {right_arm_motors[0]->get_motor_spd(), right_arm_motors[1]->get_motor_spd(),
                               right_arm_motors[2]->get_motor_spd(), right_arm_motors[3]->get_motor_spd(),
@@ -206,31 +206,39 @@ void MotorsNode::reset_motors(const std::shared_ptr<motors::srv::ResetMotors::Re
             for (int i = can0_startID_; i <= can0_endID_; i++) {
                 if (i - can0_startID_ == 4 || i - can0_startID_ == 5) {
                     left_leg_motors[i - can0_startID_]->MotorMitModeCmd(
-                        left_ankle_motors_default_angle_[i - can0_startID_ - 4], 0, 20, 2, 0);
+                        left_ankle_motors_default_angle_[i - can0_startID_ - 4], 0, 40, 2, 0);
                 } else {
                     left_leg_motors[i - can0_startID_]->MotorMitModeCmd(
-                        joint_default_angle_[i - can0_startID_], 0, 20, 2, 0);
+                        joint_default_angle_[i - can0_startID_], 0, 40, 2, 0);
                 }
                 Timer::ThreadSleepFor(1);
             }
             for (int i = can1_startID_; i <= can1_endID_; i++) {
                 if (i - can1_startID_ == 4 || i - can1_startID_ == 5) {
                     right_leg_motors[i - can1_startID_]->MotorMitModeCmd(
-                        -right_ankle_motors_default_angle_[i - can1_startID_ - 4], 0, 20, 2, 0);
+                        -right_ankle_motors_default_angle_[i - can1_startID_ - 4], 0, 40, 2, 0);
+                } else if (i - can1_startID_ == 2 || i - can1_startID_ == 3) {
+                    right_leg_motors[i - can1_startID_]->MotorMitModeCmd(
+                        -joint_default_angle_[i - can1_startID_ + 6], 0, 40, 2, 0);
                 } else {
                     right_leg_motors[i - can1_startID_]->MotorMitModeCmd(
-                        joint_default_angle_[i - can1_startID_ + 6], 0, 20, 2, 0);
+                        joint_default_angle_[i - can1_startID_ + 6], 0, 40, 2, 0);
                 }
                 Timer::ThreadSleepFor(1);
             }
             for (int i = can2_startID_; i <= can2_endID_; i++) {
                 left_arm_motors[i - can2_startID_]->MotorMitModeCmd(
-                    joint_default_angle_[i - can2_startID_ + 13], 0, 20, 2, 0);
+                    joint_default_angle_[i - can2_startID_ + 13], 0, 40, 2, 0);
                 Timer::ThreadSleepFor(1);
             }
             for (int i = can3_startID_; i <= can3_endID_; i++) {
-                right_arm_motors[i - can3_startID_]->MotorMitModeCmd(
-                    joint_default_angle_[i - can3_startID_ + 18], 0, 20, 2, 0);
+                if (i - can3_startID_ == 0 || i - can3_startID_ == 3) {
+                    right_arm_motors[i - can3_startID_]->MotorMitModeCmd(
+                        -joint_default_angle_[i - can3_startID_ + 18], 0, 40, 2, 0);
+                } else {
+                    right_arm_motors[i - can3_startID_]->MotorMitModeCmd(
+                        joint_default_angle_[i - can3_startID_ + 18], 0, 40, 2, 0);
+                }
                 Timer::ThreadSleepFor(1);
             }
             Timer::ThreadSleepFor(2000);
@@ -251,6 +259,10 @@ void MotorsNode::reset_motors(const std::shared_ptr<motors::srv::ResetMotors::Re
                     right_leg_motors[i - can1_startID_]->MotorMitModeCmd(
                         -right_ankle_motors_default_angle_[i - can1_startID_ - 4], 0, kp_[i - can1_startID_],
                         kd_[i - can1_startID_], 0);
+                } else if (i - can1_startID_ == 2 || i - can1_startID_ == 3) {
+                    right_leg_motors[i - can1_startID_]->MotorMitModeCmd(
+                        -joint_default_angle_[i - can1_startID_ + 6], 0, kp_[i - can1_startID_],
+                        kd_[i - can1_startID_], 0);
                 } else {
                     right_leg_motors[i - can1_startID_]->MotorMitModeCmd(
                         joint_default_angle_[i - can1_startID_ + 6], 0, kp_[i - can1_startID_],
@@ -265,9 +277,15 @@ void MotorsNode::reset_motors(const std::shared_ptr<motors::srv::ResetMotors::Re
                 Timer::ThreadSleepFor(1);
             }
             for (int i = can3_startID_; i <= can3_endID_; i++) {
-                right_arm_motors[i - can3_startID_]->MotorMitModeCmd(
-                    joint_default_angle_[i - can3_startID_ + 18], 0, kp_[i - can3_startID_ + 7],
-                    kd_[i - can3_startID_ + 7], 0);
+                if (i - can3_startID_ == 0 || i - can3_startID_ == 3) {
+                    right_arm_motors[i - can3_startID_]->MotorMitModeCmd(
+                        -joint_default_angle_[i - can3_startID_ + 18], 0, kp_[i - can3_startID_ + 7],
+                        kd_[i - can3_startID_ + 7], 0);
+                } else {
+                    right_arm_motors[i - can3_startID_]->MotorMitModeCmd(
+                        joint_default_angle_[i - can3_startID_ + 18], 0, kp_[i - can3_startID_ + 7],
+                        kd_[i - can3_startID_ + 7], 0);
+                }
                 Timer::ThreadSleepFor(1);
             }
         }
