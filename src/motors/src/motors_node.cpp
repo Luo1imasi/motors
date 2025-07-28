@@ -52,15 +52,15 @@ void MotorsNode::publish_right_leg() {
                               right_leg_motors[6]->get_motor_pos() - joint_default_angle_[12]};
     right_message.velocity = {right_leg_motors[0]->get_motor_spd(),
                               right_leg_motors[1]->get_motor_spd(),
-                              right_leg_motors[2]->get_motor_spd(),
-                              right_leg_motors[3]->get_motor_spd(),
+                              -right_leg_motors[2]->get_motor_spd(),
+                              -right_leg_motors[3]->get_motor_spd(),
                               vel[0],
                               vel[1],
                               right_leg_motors[6]->get_motor_spd()};
     right_message.effort = {right_leg_motors[0]->get_motor_current(),
                             right_leg_motors[1]->get_motor_current(),
-                            right_leg_motors[2]->get_motor_current(),
-                            right_leg_motors[3]->get_motor_current(),
+                            -right_leg_motors[2]->get_motor_current(),
+                            -right_leg_motors[3]->get_motor_current(),
                             tau[0],
                             tau[1],
                             right_leg_motors[6]->get_motor_current()};
@@ -94,12 +94,12 @@ void MotorsNode::publish_right_arm() {
                               right_arm_motors[2]->get_motor_pos() - joint_default_angle_[20],
                               -(right_arm_motors[3]->get_motor_pos() + joint_default_angle_[21]),
                               right_arm_motors[4]->get_motor_pos() - joint_default_angle_[22]};
-    right_message.velocity = {right_arm_motors[0]->get_motor_spd(), right_arm_motors[1]->get_motor_spd(),
-                              right_arm_motors[2]->get_motor_spd(), right_arm_motors[3]->get_motor_spd(),
+    right_message.velocity = {-right_arm_motors[0]->get_motor_spd(), right_arm_motors[1]->get_motor_spd(),
+                              right_arm_motors[2]->get_motor_spd(), -right_arm_motors[3]->get_motor_spd(),
                               right_arm_motors[4]->get_motor_spd()};
     right_message.effort = {
-        right_arm_motors[0]->get_motor_current(), right_arm_motors[1]->get_motor_current(),
-        right_arm_motors[2]->get_motor_current(), right_arm_motors[3]->get_motor_current(),
+        -right_arm_motors[0]->get_motor_current(), right_arm_motors[1]->get_motor_current(),
+        right_arm_motors[2]->get_motor_current(), -right_arm_motors[3]->get_motor_current(),
         right_arm_motors[4]->get_motor_current()};
     right_arm_publisher_->publish(right_message);
 }
@@ -289,7 +289,7 @@ void MotorsNode::reset_motors(const std::shared_ptr<motors::srv::ResetMotors::Re
                 Timer::ThreadSleepFor(1);
             }
         }
-        Timer::ThreadSleepFor(100);
+        Timer::ThreadSleepFor(1000);
         publish_left_leg();
         publish_right_leg();
         publish_left_arm();
@@ -325,7 +325,7 @@ void MotorsNode::read_motors(const std::shared_ptr<motors::srv::ReadMotors::Requ
                 Timer::ThreadSleepForUs(400);
             }
         }
-        Timer::ThreadSleepFor(100);
+        Timer::ThreadSleepFor(1000);
         publish_left_leg();
         publish_right_leg();
         publish_left_arm();
@@ -406,7 +406,7 @@ void MotorsNode::set_zeros(const std::shared_ptr<motors::srv::SetZeros::Request>
                 Timer::ThreadSleepFor(1);
             }
         }
-        Timer::ThreadSleepFor(100);
+        Timer::ThreadSleepFor(1000);
         response->success = true;
         response->message = "Zeros set successfully";
     } catch (const std::exception& e) {
