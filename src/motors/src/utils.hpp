@@ -1,5 +1,4 @@
-#ifndef UTILS_HPP
-#define UTILS_HPP
+#pragma once
 
 #include <math.h>
 #include <spdlog/logger.h>
@@ -96,5 +95,3 @@ inline std::shared_ptr<spdlog::logger> setup_logger(std::vector<spdlog::sink_ptr
     }
     return logger;
 }
-
-#endif

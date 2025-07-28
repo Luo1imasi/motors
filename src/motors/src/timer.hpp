@@ -1,5 +1,4 @@
-#ifndef TIMER_HPP_INCLUDE
-#define TIMER_HPP_INCLUDE
+#pragma once
 
 #include <chrono>
 #include <thread>
@@ -29,5 +28,3 @@ class Timer {
         std::this_thread::sleep_for(std::chrono::microseconds(num_steps));
     }
 };
-
-#endif

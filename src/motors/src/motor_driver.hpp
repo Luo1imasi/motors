@@ -1,6 +1,4 @@
-#ifndef MOTOR_DRIVER_HPP
-#define MOTOR_DRIVER_HPP
-
+#pragma once
 // #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>
 #include <stdint.h>
@@ -25,38 +23,17 @@ class MotorDriver {
         POS = 2,
         SPD = 3,
     };
-    enum MotorErrorType_e {
-        NONE_ERROR = 0,
-        OVER_CURRENT = 1,
-        OVER_TEMPERATURE = 2,
-        COMMUNICATION_ERROR = 3,
-    };
 
     static constexpr double judgment_accuracy_threshold = 1e-2;
     static const int normal_sleep_time = 5;
     static const int setup_sleep_time = 500;
 
-    static constexpr float joint_lower_bounder_[7] = {-M_PI * 180 / 180,
-                                                      -M_PI * 170 / 180,
-                                                      -M_PI * 5 / 180,
-                                                      -M_PI * 148 / 180,
-                                                      -M_PI * 100 / 180,
-                                                      -M_PI * 179 / 180,
-                                                      -10};
-    static constexpr float joint_upper_bounder_[7] = {+M_PI * 120 / 180,
-                                                      +M_PI * 10 / 180,
-                                                      +M_PI * 180 / 180,
-                                                      +M_PI * 148 / 180,
-                                                      +M_PI * 100 / 180,
-                                                      +M_PI * 179 / 180,
-                                                      +10};
-
     MotorDriver();
     virtual ~MotorDriver() = default;
 
     static std::shared_ptr<MotorDriver> MotorCreate(uint16_t motor_id, const char* interface,
-                                                    const std::string type = std::string("DM"),
-                                                    uint16_t master_id_offset = 0);
+                                                    const std::string motor_type, uint16_t master_id_offset,
+                                                    const int motor_model);
 
     virtual void CanRxMsgCallback(const can_frame& rx_frame) = 0;
     /**
@@ -105,10 +82,6 @@ class MotorDriver {
 
     virtual bool MotorWriteFlash() = 0;
 
-    virtual std::vector<double> MotorBoundary() {
-        return std::vector<double>{joint_lower_bounder_[motor_id_ - 1], joint_upper_bounder_[motor_id_ - 1]};
-    };
-
     /**
      * @brief Requests motor parameters based on a specific command.
      *
@@ -156,45 +129,6 @@ class MotorDriver {
     virtual void MotorMitModeCmd(float f_p, float f_v, float f_kp, float f_kd, float f_t) = 0;
 
     /**
-     * @brief Sets the position control parameters (proportional gain and derivative gain) for the motor.
-     *
-     * This function configures the position control parameters (PID gains) for the motor.
-     *
-     * @param kp Proportional gain for position control.
-     * @param kd Derivative gain for position control.
-     */
-    virtual void MotorSetPosParam(float kp, float kd) = 0;
-
-    /**
-     * @brief Sets the speed control parameters (proportional gain and integral gain) for the motor.
-     *
-     * This function configures the speed control parameters (PI gains) for the motor.
-     *
-     * @param kp Proportional gain for speed control.
-     * @param ki Integral gain for speed control.
-     */
-    virtual void MotorSetSpdParam(float kp, float ki) = 0;
-
-    /**
-     * @brief Sets the filter parameters for position and speed control.
-     *
-     * This function configures the filter parameters used in position and speed control.
-     *
-     * @param position_kd_filter Filter coefficient for position control derivative term.
-     * @param kd_spd Filter coefficient for speed control derivative term.
-     */
-    virtual void MotorSetFilterParam(float position_kd_filter, float kd_spd) = 0;
-
-    /**
-     * @brief Sets the ID of the motor.
-     *
-     * This function assigns a unique identifier (ID) to the motor.
-     *
-     * @param motor_id The ID of the motor.
-     */
-    virtual void set_motor_id(uint8_t motor_id) = 0;
-
-    /**
      * @brief Sets the control mode for the motor.
      *
      * This function specifies the control mode for the motor.
@@ -217,12 +151,6 @@ class MotorDriver {
     // to get error code
 
     virtual void MotorResetID() = 0;
-
-    bool MotorCurrentDetect();
-    bool MotorCommunicationDetect();
-    bool MotorTemperatureDetect();
-    bool MotorErrorDetect();
-    void MotorErrorModeCmd();
 
     /**
      * @brief Retrieves the ID of the motor.
@@ -252,33 +180,6 @@ class MotorDriver {
     virtual uint8_t get_error_id() { return error_id_; }
 
     /**
-     * @brief Retrieves the timeout value configured for the motor.
-     *
-     * This function returns the timeout value set for the motor operations.
-     *
-     * @return The timeout value in milliseconds.
-     */
-    virtual uint32_t get_timeout() { return timeout_; }
-
-    /**
-     * @brief Retrieves the gear ratio of the motor.
-     *
-     * This function returns the gear ratio of the motor.
-     *
-     * @return The gear ratio of the motor.
-     */
-    virtual float get_gear_ratio() { return gear_ratio_; }
-
-    /**
-     * @brief Retrieves the result of writing parameters to the motor.
-     *
-     * This function returns the result of writing parameters to the motor.
-     *
-     * @return True if writing parameters was successful; otherwise, false.
-     */
-    virtual bool get_write_para_res() { return write_para_res_; }
-
-    /**
      * @brief Retrieves the current position of the motor.
      *
      * This function returns the current position of the motor.
@@ -306,15 +207,6 @@ class MotorDriver {
     virtual float get_motor_current() { return motor_current_; }
 
     /**
-     * @brief Retrieves the error ID associated with the motor.
-     *
-     * This function returns the error ID that indicates any error condition of the motor.
-     *
-     * @return The error ID of the motor.
-     */
-    virtual float get_motor_error_id() { return error_id_; }
-
-    /**
      * @brief Retrieves the temperature of the motor.
      *
      * This function returns the current temperature of the motor.
@@ -330,55 +222,20 @@ class MotorDriver {
      *
      * @return The acceleration of the motor.
      */
-    virtual float get_motor_acceleration() { return motor_acceleration_; }
-    virtual float get_motor_kp_spd() { return motor_kp_spd; }
-    virtual float get_motor_ki_spd() { return motor_ki_spd; }
-    virtual float get_motor_kd_spd() { return motor_kd_spd; }
-    virtual float get_motor_kp_pos() { return motor_kp_pos; }
-    virtual float get_motor_ki_pos() { return motor_ki_pos; }
-    virtual float get_motor_kd_pos() { return motor_kd_pos; }
-    virtual void set_max_current(float max_current) { max_current_ = max_current; }
-    virtual float get_max_current() const { return max_current_; }
-    bool get_write_para_res_and_clear() {
-        bool res = write_para_res_;
-        write_para_res_ = false;
-        return res;
-    }
-    static uint8_t motor_error_type_;
 
    protected:
     std::shared_ptr<spdlog::logger> logger_;
     uint16_t motor_id_;
     uint16_t master_id_;
-    float max_current_ = 15.f;
 
     uint8_t motor_control_mode_;  // 0:none 1:pos 2:spd 3:mit
 
     uint8_t error_id_ = 0;
-    uint32_t timeout_ = 0;    // dm 8 od 0x12
-    float gear_ratio_ = 0.f;  // dm 11 od 0x0D
-    bool write_para_res_ = false;
 
-    float motor_pos_ = 0.f;      // od 1
-    float motor_spd_ = 0.f;      // od 2
-    float motor_current_ = 0.f;  // od 3
+    float motor_pos_ = 0.f;
+    float motor_spd_ = 0.f;
+    float motor_current_ = 0.f;
     float motor_temperature_ = 0.f;
-    float motor_acceleration_ = 0.f;  // od 5 dm 3
-
-    float motor_kp_spd = 0.f;  // dm 16 速度环比例参数
-                               // od 6
-    float motor_ki_spd = 0.f;  // dm 17 速度环积分参数
-                               // od 7
-    float motor_kd_spd = 0.f;  // od 11 速度环微分参数
-                               // dm 1 扭矩系数
-    float motor_kp_pos = 0.f;  // dm 18 位置环比例参数
-                               // od 8
-    float motor_ki_pos = 0.f;  // dm 19 位置环积分参数
-                               // od 0x0C 位置环积分参数
-    float motor_kd_pos = 0.f;  // od 9 位置环微分参数
-                               // dm 22 (位置环)阻尼比
-
-    uint16_t heartbeat_detect_counter_;
 };
 
 using union32_t = union Union32 {
@@ -387,5 +244,3 @@ using union32_t = union Union32 {
     uint32_t u;
     uint8_t buf[4];
 };
-
-#endif

@@ -4,8 +4,7 @@
  * to facilitates frame transmission and reception.
  */
 
-#ifndef SOCKETCAN_H
-#define SOCKETCAN_H
+#pragma once
 
 #include <linux/can.h>
 #include <net/if.h>
@@ -84,5 +83,3 @@ class SocketCAN {
     void remove_can_callback(const CanCbkId id);
     void clear_can_callbacks();
 };
-
-#endif
