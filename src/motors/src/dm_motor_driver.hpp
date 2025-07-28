@@ -1,5 +1,5 @@
-#ifndef DM_MOTOR_DRIVER_HPP
-#define DM_MOTOR_DRIVER_HPP
+#pragma once
+
 #include <mutex>
 #include <string>
 
@@ -16,9 +16,80 @@ enum DMError {
     OVER_LOAD = 0x0E,
 };
 
+enum DM_Motor_Model {
+    DM4310,
+    DM4310_48V,
+    DM4340,
+    DM4340_48V,
+    DM6006,
+    DM8006,
+    DM8009,
+    DM10010L,
+    DM10010,
+    DMH3510,
+    DMH6215,
+    DMG6220,
+    Num_Of_Motor
+};
+
+enum DM_REG {
+    UV_Value = 0,
+    KT_Value = 1,
+    OT_Value = 2,
+    OC_Value = 3,
+    ACC = 4,
+    DEC = 5,
+    MAX_SPD = 6,
+    MST_ID = 7,
+    ESC_ID = 8,
+    TIMEOUT = 9,
+    CTRL_MODE = 10,
+    Damp = 11,
+    Inertia = 12,
+    hw_ver = 13,
+    sw_ver = 14,
+    SN = 15,
+    NPP = 16,
+    Rs = 17,
+    LS = 18,
+    Flux = 19,
+    Gr = 20,
+    PMAX = 21,
+    VMAX = 22,
+    TMAX = 23,
+    I_BW = 24,
+    KP_ASR = 25,
+    KI_ASR = 26,
+    KP_APR = 27,
+    KI_APR = 28,
+    OV_Value = 29,
+    GREF = 30,
+    Deta = 31,
+    V_BW = 32,
+    IQ_c1 = 33,
+    VL_c1 = 34,
+    can_br = 35,
+    sub_ver = 36,
+    u_off = 50,
+    v_off = 51,
+    k1 = 52,
+    k2 = 53,
+    m_off = 54,
+    dir = 55,
+    p_m = 80,
+    xout = 81,
+};
+
+typedef struct {
+    float PosMax;
+    float SpdMax;
+    float TauMax;
+} Limit_param;
+
 class DmMotorDriver : public MotorDriver {
    public:
-    DmMotorDriver(uint16_t motor_id, std::string can_interface, uint16_t master_id_offset = 16);
+    DmMotorDriver(uint16_t motor_id, std::string can_interface, uint16_t master_id_offset,
+                  DM_Motor_Model motor_model);
     ~DmMotorDriver();
 
     virtual void MotorLock() override;
@@ -32,11 +103,7 @@ class DmMotorDriver : public MotorDriver {
     virtual void MotorPosModeCmd(float pos, float spd, bool ignore_limit) override;
     virtual void MotorSpdModeCmd(float spd) override;
     virtual void MotorMitModeCmd(float f_p, float f_v, float f_kp, float f_kd, float f_t) override;
-    virtual void MotorSetPosParam(float kp, float kd) override;
-    virtual void MotorSetSpdParam(float kp, float ki) override;
-    virtual void MotorSetFilterParam(float position_kd_filter, float kd_spd) override;
     virtual void MotorResetID() override {};
-    virtual void set_motor_id(uint8_t motor_id) override;
     virtual void set_motor_control_mode(uint8_t motor_control_mode) override;
     virtual int get_response_count() const {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -48,31 +115,13 @@ class DmMotorDriver : public MotorDriver {
     int response_count = 0;
     mutable std::mutex mutex_;
     bool param_cmd_flag_[30] = {false};
-    // const std::string kFirmWareVersion = "3163";
-    const float kKpMin = 0.0f;
-    const float kKpMax = 500.0f;
-    const float kKdMin = 0.0f;
-    const float kKdMax = 5.0f;
-    const float kIMin = -30.0f;
-    const float kIMax = 30.0f;
-    const float kPMax = 12.5f;
-    const float kPMin = -12.5f;
-    const float kSpdMin = -30.0f;
-    const float kSpdMax = 30.0f;
-    const float kTorqueMin = -10.0f;
-    const float kTorqueMax = 10.0f;
+    const float KpMin = 0.0f;
+    const float KpMax = 500.0f;
+    const float KdMin = 0.0f;
+    const float KdMax = 5.0f;
+    DM_Motor_Model motor_model_;
+    Limit_param limit_param_;
     uint8_t mos_temperature_ = 0;
-    float pos_max_;                  // dm 12 位置映射最大值
-    float vel_max_;                  // dm 13 速度映射最大值
-    float torque_max_;               // dm 14 扭矩映射最大值
-    float current_bandwidth_;        // dm 15 电流环控制带宽
-    float gear_torque_coefficient_;  // dm 21 齿轮扭矩系数
-    uint8_t ctrl_mode_;              // dm 9 控制模式
-    float under_voltage_;            // dm 0 欠压保护值
-    float over_voltage_;             // dm 20 过压保护值
-    float current_limit_;            // dm 2 限流值
-    float dec_;                      // dm 4 减速度
-    float max_speed_;                // dm 5 最大速度
     void DmMotorSetZero();
     void DmMotorClearError();
     void DmWriteRegister(uint8_t rid, float value);
@@ -81,5 +130,3 @@ class DmMotorDriver : public MotorDriver {
     virtual void CanRxMsgCallback(const can_frame& rx_frame) override;
     std::shared_ptr<SocketCAN> can_;
 };
-
-#endif

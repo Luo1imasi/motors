@@ -1,12 +1,27 @@
 // DmMotorDriver.cpp
 #include "dm_motor_driver.hpp"
 
-// extern std::shared_ptr<spdlog::logger> motor_logger;
+Limit_param limit_param[Num_Of_Motor] = {
+    {12.5, 30, 10},   // DM4310
+    {12.5, 50, 10},   // DM4310_48V
+    {12.5, 8, 28},    // DM4340
+    {12.5, 10, 28},   // DM4340_48V
+    {12.5, 45, 20},   // DM6006
+    {12.5, 45, 40},   // DM8006
+    {12.5, 45, 54},   // DM8009
+    {12.5, 25, 200},  // DM10010L
+    {12.5, 20, 200},  // DM10010
+    {12.5, 280, 1},   // DMH3510
+    {12.5, 45, 10},   // DMH6215
+    {12.5, 45, 10}    // DMG6220
+};
 
-DmMotorDriver::DmMotorDriver(uint16_t motor_id, std::string can_interface, uint16_t master_id_offset)
-    : MotorDriver(), can_(SocketCAN::get(can_interface)) {
+DmMotorDriver::DmMotorDriver(uint16_t motor_id, std::string can_interface, uint16_t master_id_offset,
+                             DM_Motor_Model motor_model)
+    : MotorDriver(), can_(SocketCAN::get(can_interface)), motor_model_(motor_model) {
     motor_id_ = motor_id;
     master_id_ = motor_id_ + master_id_offset;
+    limit_param_ = limit_param[motor_model_];
     CanCbkFunc can_callback = std::bind(&DmMotorDriver::CanRxMsgCallback, this, std::placeholders::_1);
     can_->add_can_callback(can_callback, master_id_);
 }
@@ -140,12 +155,14 @@ void DmMotorDriver::CanRxMsgCallback(const can_frame& rx_frame) {
     if ((rx_frame.data[0] & 0xF0) >> 4 > 7) {  // error code range from 8 to 15
         error_id_ = (rx_frame.data[0] & 0xF0) >> 4;
     }
-    motor_pos_ = range_map(pos_int, uint16_t(0), bitmax<uint16_t>(16), kPMin, kPMax);
-    motor_spd_ = range_map(spd_int, uint16_t(0), bitmax<uint16_t>(12), kSpdMin, kSpdMax);
-    motor_current_ = range_map(t_int, uint16_t(0), bitmax<uint16_t>(12), kTorqueMin, kTorqueMax);
+    motor_pos_ =
+        range_map(pos_int, uint16_t(0), bitmax<uint16_t>(16), -limit_param_.PosMax, limit_param_.PosMax);
+    motor_spd_ =
+        range_map(spd_int, uint16_t(0), bitmax<uint16_t>(12), -limit_param_.SpdMax, limit_param_.SpdMax);
+    motor_current_ =
+        range_map(t_int, uint16_t(0), bitmax<uint16_t>(12), -limit_param_.TauMax, limit_param_.TauMax);
     mos_temperature_ = rx_frame.data[6];
     motor_temperature_ = rx_frame.data[7];
-    heartbeat_detect_counter_ = 0;
 }
 
 void DmMotorDriver::MotorGetParam(uint8_t param_cmd) {
@@ -174,18 +191,13 @@ void DmMotorDriver::MotorPosModeCmd(float pos, float spd, bool ignore_limit) {
         set_motor_control_mode(POS);
         return;
     }
-    if (pos < joint_lower_bounder_[motor_id_ - 1] || pos > joint_upper_bounder_[motor_id_ - 1]) {
-        logger_->warn("motor {0} pos {1} is out of jointspace: {2} {3}", motor_id_, pos,
-                      joint_lower_bounder_[motor_id_ - 1], joint_upper_bounder_[motor_id_ - 1]);
-        return;
-    }
     can_frame tx_frame;
     tx_frame.can_id = 0x100 + motor_id_;
     tx_frame.can_dlc = 0x08;
     uint8_t *pbuf, *vbuf;
 
-    spd = limit(spd, kSpdMin, kSpdMax);
-    pos = limit(pos, kPMin, kPMax);
+    spd = limit(spd, -limit_param_.SpdMax, limit_param_.SpdMax);
+    pos = limit(pos, -limit_param_.PosMax, limit_param_.PosMax);
 
     pbuf = (uint8_t*)&pos;
     vbuf = (uint8_t*)&spd;
@@ -238,17 +250,17 @@ void DmMotorDriver::MotorMitModeCmd(float f_p, float f_v, float f_kp, float f_kd
     uint16_t p, v, kp, kd, t;
     can_frame tx_frame;
 
-    f_p = limit(f_p, kPMin, kPMax);
-    f_v = limit(f_v, kSpdMin, kSpdMax);
-    f_kp = limit(f_kp, kKpMin, kKpMax);
-    f_kd = limit(f_kd, kKdMin, kKdMax);
-    f_t = limit(f_t, kTorqueMin, kTorqueMax);
+    f_p = limit(f_p, -limit_param_.PosMax, limit_param_.PosMax);
+    f_v = limit(f_v, -limit_param_.SpdMax, limit_param_.SpdMax);
+    f_kp = limit(f_kp, KpMin, KpMax);
+    f_kd = limit(f_kd, KdMin, KdMax);
+    f_t = limit(f_t, -limit_param_.TauMax, limit_param_.TauMax);
 
-    p = range_map(f_p, kPMin, kPMax, uint16_t(0), bitmax<uint16_t>(16));
-    v = range_map(f_v, kSpdMin, kSpdMax, uint16_t(0), bitmax<uint16_t>(12));
-    kp = range_map(f_kp, kKpMin, kKpMax, uint16_t(0), bitmax<uint16_t>(12));
-    kd = range_map(f_kd, kKdMin, kKdMax, uint16_t(0), bitmax<uint16_t>(12));
-    t = range_map(f_t, kTorqueMin, kTorqueMax, uint16_t(0), bitmax<uint16_t>(12));
+    p = range_map(f_p, -limit_param_.PosMax, limit_param_.PosMax, uint16_t(0), bitmax<uint16_t>(16));
+    v = range_map(f_v, -limit_param_.SpdMax, limit_param_.SpdMax, uint16_t(0), bitmax<uint16_t>(12));
+    kp = range_map(f_kp, KpMin, KpMax, uint16_t(0), bitmax<uint16_t>(12));
+    kd = range_map(f_kd, KdMin, KdMax, uint16_t(0), bitmax<uint16_t>(12));
+    t = range_map(f_t, -limit_param_.TauMax, limit_param_.TauMax, uint16_t(0), bitmax<uint16_t>(12));
 
     tx_frame.can_id = motor_id_;
     tx_frame.can_dlc = 0x08;
@@ -268,15 +280,6 @@ void DmMotorDriver::MotorMitModeCmd(float f_p, float f_v, float f_kp, float f_kd
         response_count++;
     }
 }
-
-// todo
-void DmMotorDriver::MotorSetPosParam(float kp, float kd) {}
-
-void DmMotorDriver::MotorSetSpdParam(float kp, float ki) {}
-
-void DmMotorDriver::MotorSetFilterParam(float position_kd_filter, float kd_spd) {}
-
-void DmMotorDriver::set_motor_id(uint8_t motor_id) {}
 
 void DmMotorDriver::set_motor_control_mode(uint8_t motor_control_mode) {
     DmWriteRegister(10, motor_control_mode);

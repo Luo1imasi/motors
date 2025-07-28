@@ -20,11 +20,10 @@ class MotorsNode : public rclcpp::Node {
         joint_default_angle_.resize(23);
         ankle_decouple_ = std::make_shared<Decouple>();
 
-        this->declare_parameter<std::vector<float>>(
-            "kp",
-            std::vector<float>{100.0, 150.0, 100.0, 150.0, 40.0, 40.0, 100.0, 40.0, 40.0, 40.0, 40.0, 40.0});
-        this->declare_parameter<std::vector<float>>(
-            "kd", std::vector<float>{4.0, 5.0, 4.0, 5.0, 3.0, 3.0, 4.0, 3.0, 3.0, 3.0, 3.0, 3.0});
+        this->declare_parameter<std::string>("motors_type", "DM");
+        this->declare_parameter<std::vector<int>>("motors_model");
+        this->declare_parameter<std::vector<float>>("kp");
+        this->declare_parameter<std::vector<float>>("kd");
         this->declare_parameter<int>("can0_startID", 0);
         this->declare_parameter<int>("can0_endID", 0);
         this->declare_parameter<int>("can1_startID", 0);
@@ -37,10 +36,7 @@ class MotorsNode : public rclcpp::Node {
         this->declare_parameter<int>("can1_masterID_offset", 0);
         this->declare_parameter<int>("can2_masterID_offset", 0);
         this->declare_parameter<int>("can3_masterID_offset", 0);
-        this->declare_parameter<std::vector<float>>(
-            "joint_default_angle",
-            std::vector<float>{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                               0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+        this->declare_parameter<std::vector<float>>("joint_default_angle");
 
         std::vector<double> tmp;
         this->get_parameter("kp", tmp);
@@ -49,6 +45,12 @@ class MotorsNode : public rclcpp::Node {
         this->get_parameter("kd", tmp);
         std::transform(tmp.begin(), tmp.end(), kd_.begin(),
                        [](double val) { return static_cast<float>(val); });
+        this->get_parameter("motors_type", motors_type_);
+        std::vector<long int> tmp_ld;
+        this->get_parameter("motors_model", tmp_ld);
+        motors_model_.resize(tmp_ld.size());
+        std::transform(tmp_ld.begin(), tmp_ld.end(), motors_model_.begin(),
+                       [](long int val) { return static_cast<int>(val); });
         this->get_parameter("can0_startID", can0_startID_);
         this->get_parameter("can0_endID", can0_endID_);
         this->get_parameter("can1_startID", can1_startID_);
@@ -65,6 +67,11 @@ class MotorsNode : public rclcpp::Node {
         std::transform(tmp.begin(), tmp.end(), joint_default_angle_.begin(),
                        [](double val) { return static_cast<float>(val); });
 
+        RCLCPP_INFO(this->get_logger(), "motors_type: %s", motors_type_.c_str());
+        RCLCPP_INFO(this->get_logger(), "motors_model: %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d",
+                    motors_model_[0], motors_model_[1], motors_model_[2], motors_model_[3], motors_model_[4],
+                    motors_model_[5], motors_model_[6], motors_model_[7], motors_model_[8], motors_model_[9],
+                    motors_model_[10], motors_model_[11]);
         RCLCPP_INFO(this->get_logger(), "kp: %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f", kp_[0], kp_[1],
                     kp_[2], kp_[3], kp_[4], kp_[5], kp_[6], kp_[7], kp_[8], kp_[9], kp_[10], kp_[11]);
         RCLCPP_INFO(this->get_logger(), "kd: %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f", kd_[0], kd_[1],
@@ -93,6 +100,11 @@ class MotorsNode : public rclcpp::Node {
         RCLCPP_INFO(this->get_logger(), "can2_masterID_offset: %d", can2_masterID_offset_);
         RCLCPP_INFO(this->get_logger(), "can3_masterID_offset: %d", can3_masterID_offset_);
 
+        left_leg_motors.resize(can0_endID_ - can0_startID_ + 1);
+        right_leg_motors.resize(can1_endID_ - can1_startID_ + 1);
+        left_arm_motors.resize(can2_endID_ - can2_startID_ + 1);
+        right_arm_motors.resize(can3_endID_ - can3_startID_ + 1);
+
         left_ankle_motors_default_angle_.resize(2);
         right_ankle_motors_default_angle_.resize(2);
         left_ankle_motors_default_angle_ << joint_default_angle_[4], joint_default_angle_[5];
@@ -103,26 +115,26 @@ class MotorsNode : public rclcpp::Node {
         ankle_decouple_->getDecoupleQVT(right_ankle_motors_default_angle_, vel, tau, false);
 
         for (int i = can0_startID_; i <= can0_endID_; i++) {
-            left_leg_motors[i - can0_startID_] =
-                MotorDriver::MotorCreate(i, "can0", "DM", can0_masterID_offset_);
+            left_leg_motors[i - can0_startID_] = MotorDriver::MotorCreate(
+                i, "can0", motors_type_, can0_masterID_offset_, motors_model_[i - can0_startID_]);
             left_leg_motors[i - can0_startID_]->MotorInit();
             Timer::ThreadSleepFor(1);
         }
         for (int i = can1_startID_; i <= can1_endID_; i++) {
-            right_leg_motors[i - can1_startID_] =
-                MotorDriver::MotorCreate(i, "can1", "DM", can1_masterID_offset_);
+            right_leg_motors[i - can1_startID_] = MotorDriver::MotorCreate(
+                i, "can1", motors_type_, can1_masterID_offset_, motors_model_[i - can0_startID_]);
             right_leg_motors[i - can1_startID_]->MotorInit();
             Timer::ThreadSleepFor(1);
         }
         for (int i = can2_startID_; i <= can2_endID_; i++) {
-            left_arm_motors[i - can2_startID_] =
-                MotorDriver::MotorCreate(i, "can2", "DM", can2_masterID_offset_);
+            left_arm_motors[i - can2_startID_] = MotorDriver::MotorCreate(
+                i, "can2", motors_type_, can2_masterID_offset_, motors_model_[i - can0_startID_ + 6]);
             left_arm_motors[i - can2_startID_]->MotorInit();
             Timer::ThreadSleepFor(1);
         }
         for (int i = can3_startID_; i <= can3_endID_; i++) {
-            right_arm_motors[i - can3_startID_] =
-                MotorDriver::MotorCreate(i, "can3", "DM", can3_masterID_offset_);
+            right_arm_motors[i - can3_startID_] = MotorDriver::MotorCreate(
+                i, "can3", motors_type_, can3_masterID_offset_, motors_model_[i - can0_startID_ + 6]);
             right_arm_motors[i - can3_startID_]->MotorInit();
             Timer::ThreadSleepFor(1);
         }
@@ -198,8 +210,10 @@ class MotorsNode : public rclcpp::Node {
                    std::shared_ptr<motors::srv::SetZeros::Response> response); 
 
    private:
-    std::shared_ptr<MotorDriver> left_leg_motors[6], right_leg_motors[7], left_arm_motors[5],
-        right_arm_motors[5];
+    std::string motors_type_;
+    std::vector<int> motors_model_;
+    std::vector<std::shared_ptr<MotorDriver>> left_leg_motors, right_leg_motors, left_arm_motors,
+        right_arm_motors;
     Eigen::VectorXd left_ankle_motors_default_angle_, right_ankle_motors_default_angle_;
     std::vector<float> kp_, kd_, joint_default_angle_;
     int can0_startID_, can0_endID_, can1_startID_, can1_endID_, can2_startID_, can2_endID_, can3_startID_,
