@@ -1,7 +1,7 @@
 MotorsNode:
     ros__parameters:
         motors_type: "DM"
-        motors_model: [8, 8, 8, 8, 4, 4, 8, 4, 4, 4, 4, 4]
+        motors_model: [1, 1, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0]
         can0_startID: 1
         can0_endID: 6
         can0_masterID_offset: 16
