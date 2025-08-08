@@ -16,21 +16,7 @@ enum DMError {
     OVER_LOAD = 0x0E,
 };
 
-enum DM_Motor_Model {
-    DM4310,
-    DM4310_48V,
-    DM4340,
-    DM4340_48V,
-    DM6006,
-    DM8006,
-    DM8009,
-    DM10010L,
-    DM10010,
-    DMH3510,
-    DMH6215,
-    DMG6220,
-    Num_Of_Motor
-};
+enum DM_Motor_Model { DM4340_48V, DM10010L_48, Num_Of_Motor };
 
 enum DM_REG {
     UV_Value = 0,
