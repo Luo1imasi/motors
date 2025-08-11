@@ -21,6 +21,7 @@ def generate_launch_description():
                 name="MotorsNode",
                 parameters=[config],
                 output="screen",
+                # prefix=["xterm -e gdb -ex run --args"],
             ),
         ]
     )
