@@ -119,7 +119,7 @@ void MotorsNode::subs_left_leg_callback(const std::shared_ptr<sensor_msgs::msg::
                kd_[4] * (vel[0] - last_left_ankle_vel_[0]),
         msg->effort[5] + kp_[5] * (q[1] - last_left_ankle_pos_[1]) +
             kd_[5] * (vel[1] - last_left_ankle_vel_[1]);
-    ankle_decouple_->getDecoupleQVT(q, vel, tau, true);
+    ankle_decouple_->getDecoupleQVT(last_left_ankle_pos_, vel, tau, true);
     {
         std::unique_lock lock(left_leg_mutex_);
         for (int i = can0_startID_; i <= can0_endID_; i++) {
@@ -149,7 +149,7 @@ void MotorsNode::subs_right_leg_callback(const std::shared_ptr<sensor_msgs::msg:
                kd_[4] * (vel[0] - last_right_ankle_vel_[0]),
         msg->effort[5] + kp_[5] * (q[1] - last_right_ankle_pos_[1]) +
             kd_[5] * (vel[1] - last_right_ankle_vel_[1]);
-    ankle_decouple_->getDecoupleQVT(q, vel, tau, false);
+    ankle_decouple_->getDecoupleQVT(last_right_ankle_pos_, vel, tau, false);
     {
         std::unique_lock lock(right_leg_mutex_);
         for (int i = can1_startID_; i <= can1_endID_; i++) {
