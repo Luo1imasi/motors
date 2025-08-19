@@ -20,6 +20,10 @@ class MotorsNode : public rclcpp::Node {
         motors_model_.resize(12);
         joint_default_angle_.resize(23);
         ankle_decouple_ = std::make_shared<Decouple>();
+        last_left_ankle_pos_(2);
+        last_left_ankle_vel_(2);
+        last_right_ankle_pos_(2);
+        last_right_ankle_vel_(2);
 
         this->declare_parameter<std::string>("motors_type", "DM");
         this->declare_parameter<std::vector<int>>("motors_model",
@@ -237,4 +241,5 @@ class MotorsNode : public rclcpp::Node {
         right_leg_subscription_, left_arm_subscription_, right_arm_subscription_;
     rclcpp::TimerBase::SharedPtr timer_;
     std::shared_ptr<Decouple> ankle_decouple_;
+    Eigen::VectorXd last_left_ankle_pos_, last_left_ankle_vel_, last_right_ankle_pos_, last_right_ankle_vel_;
 };

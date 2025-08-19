@@ -8,6 +8,8 @@ void MotorsNode::publish_left_leg() {
     Eigen::VectorXd tau(2);
     tau << left_leg_motors[4]->get_motor_current(), left_leg_motors[5]->get_motor_current();
     ankle_decouple_->getForwardQVT(q, vel, tau, true);
+    last_left_ankle_pos_ = q;
+    last_left_ankle_vel_ = vel;
     auto left_message = sensor_msgs::msg::JointState();
     left_message.header.stamp = this->now();
     left_message.name = {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6"};
@@ -40,6 +42,8 @@ void MotorsNode::publish_right_leg() {
     Eigen::VectorXd tau(2);
     tau << -right_leg_motors[4]->get_motor_current(), -right_leg_motors[5]->get_motor_current();
     ankle_decouple_->getForwardQVT(q, vel, tau, false);
+    last_right_ankle_pos_ = q;
+    last_right_ankle_vel_ = vel;
     auto right_message = sensor_msgs::msg::JointState();
     right_message.header.stamp = this->now();
     right_message.name = {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6", "joint7"};
@@ -105,20 +109,24 @@ void MotorsNode::publish_right_arm() {
 }
 
 void MotorsNode::subs_left_leg_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg) {
+    publish_left_leg();
     Eigen::VectorXd q(2);
     q << msg->position[4] + joint_default_angle_[4], msg->position[5] + joint_default_angle_[5];
     Eigen::VectorXd vel(2);
     vel << msg->velocity[4], msg->velocity[5];
     Eigen::VectorXd tau(2);
-    tau << msg->effort[4], msg->effort[5];
+    tau << msg->effort[4] + kp_[4] * (q[0] - last_left_ankle_pos_[0]) +
+               kd_[4] * (vel[0] - last_left_ankle_vel_[0]),
+        msg->effort[5] + kp_[5] * (q[1] - last_left_ankle_pos_[1]) +
+            kd_[5] * (vel[1] - last_left_ankle_vel_[1]);
     ankle_decouple_->getDecoupleQVT(q, vel, tau, true);
     {
         std::unique_lock lock(left_leg_mutex_);
         for (int i = can0_startID_; i <= can0_endID_; i++) {
             if (i - can0_startID_ == 4 || i - can0_startID_ == 5) {
-                left_leg_motors[i - can0_startID_]->MotorMitModeCmd(
-                    q[i - can0_startID_ - 4], vel[i - can0_startID_ - 4], kp_[i - can0_startID_],
-                    kd_[i - can0_startID_], tau[i - can0_startID_ - 4]);
+                left_leg_motors[i - can0_startID_]->MotorMitModeCmd(q[i - can0_startID_ - 4],
+                                                                    vel[i - can0_startID_ - 4], 0.0, 0.0,
+                                                                    tau[i - can0_startID_ - 4]);
             } else {
                 left_leg_motors[i - can0_startID_]->MotorMitModeCmd(
                     msg->position[i - can0_startID_] + joint_default_angle_[i - can0_startID_],
@@ -128,24 +136,27 @@ void MotorsNode::subs_left_leg_callback(const std::shared_ptr<sensor_msgs::msg::
             Timer::ThreadSleepForUs(200);
         }
     }
-    publish_left_leg();
 }
 
 void MotorsNode::subs_right_leg_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg) {
+    publish_right_leg();
     Eigen::VectorXd q(2);
     q << msg->position[4] + joint_default_angle_[10], msg->position[5] + joint_default_angle_[11];
     Eigen::VectorXd vel(2);
     vel << msg->velocity[4], msg->velocity[5];
     Eigen::VectorXd tau(2);
-    tau << msg->effort[4], msg->effort[5];
+    tau << msg->effort[4] + kp_[4] * (q[0] - last_right_ankle_pos_[0]) +
+               kd_[4] * (vel[0] - last_right_ankle_vel_[0]),
+        msg->effort[5] + kp_[5] * (q[1] - last_right_ankle_pos_[1]) +
+            kd_[5] * (vel[1] - last_right_ankle_vel_[1]);
     ankle_decouple_->getDecoupleQVT(q, vel, tau, false);
     {
         std::unique_lock lock(right_leg_mutex_);
         for (int i = can1_startID_; i <= can1_endID_; i++) {
             if (i - can1_startID_ == 4 || i - can1_startID_ == 5) {
-                right_leg_motors[i - can1_startID_]->MotorMitModeCmd(
-                    -q[i - can1_startID_ - 4], -vel[i - can1_startID_ - 4], kp_[i - can1_startID_],
-                    kd_[i - can1_startID_], -tau[i - can1_startID_ - 4]);
+                right_leg_motors[i - can1_startID_]->MotorMitModeCmd(-q[i - can1_startID_ - 4],
+                                                                     -vel[i - can1_startID_ - 4], 0.0, 0.0,
+                                                                     -tau[i - can1_startID_ - 4]);
             } else if (i - can1_startID_ == 2 || i - can1_startID_ == 3) {
                 right_leg_motors[i - can1_startID_]->MotorMitModeCmd(
                     -(msg->position[i - can1_startID_] + joint_default_angle_[i - can1_startID_ + 6]),
@@ -160,10 +171,10 @@ void MotorsNode::subs_right_leg_callback(const std::shared_ptr<sensor_msgs::msg:
             Timer::ThreadSleepForUs(200);
         }
     }
-    publish_right_leg();
 }
 
 void MotorsNode::subs_left_arm_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg) {
+    publish_left_arm();
     {
         std::unique_lock lock(left_arm_mutex_);
         for (int i = can2_startID_; i <= can2_endID_; i++) {
@@ -174,10 +185,10 @@ void MotorsNode::subs_left_arm_callback(const std::shared_ptr<sensor_msgs::msg::
             Timer::ThreadSleepForUs(200);
         }
     }
-    publish_left_arm();
 }
 
 void MotorsNode::subs_right_arm_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg) {
+    publish_right_arm();
     {
         std::unique_lock lock(right_arm_mutex_);
         for (int i = can3_startID_; i <= can3_endID_; i++) {
@@ -195,7 +206,6 @@ void MotorsNode::subs_right_arm_callback(const std::shared_ptr<sensor_msgs::msg:
             Timer::ThreadSleepForUs(200);
         }
     }
-    publish_right_arm();
 }
 
 void MotorsNode::reset_motors(const std::shared_ptr<motors::srv::ResetMotors::Request> request,
