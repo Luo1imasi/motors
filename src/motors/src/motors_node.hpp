@@ -196,14 +196,15 @@ class MotorsNode : public rclcpp::Node {
     void init_motors();
     void deinit_motors();
     void set_zeros();
+    void read_motors();
     void reset_motors_srv(const std::shared_ptr<motors::srv::ResetMotors::Request> request,
                       std::shared_ptr<motors::srv::ResetMotors::Response> response);
     void read_motors_srv(const std::shared_ptr<motors::srv::ReadMotors::Request> request,
                      std::shared_ptr<motors::srv::ReadMotors::Response> response);
-    void control_motor_srv(const std::shared_ptr<motors::srv::ControlMotor::Request> request,
-                               std::shared_ptr<motors::srv::ControlMotor::Response> response);
     void set_zeros_srv(const std::shared_ptr<motors::srv::SetZeros::Request> request,
                    std::shared_ptr<motors::srv::SetZeros::Response> response);
+    void control_motor_srv(const std::shared_ptr<motors::srv::ControlMotor::Request> request,
+                               std::shared_ptr<motors::srv::ControlMotor::Response> response);
 
    private:
     bool is_init_ = false;

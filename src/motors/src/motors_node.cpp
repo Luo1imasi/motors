@@ -255,8 +255,8 @@ void MotorsNode::subs_joy_callback(const std::shared_ptr<sensor_msgs::msg::Joy> 
         RCLCPP_INFO(this->get_logger(), "Motors reset.");
     }
     if (msg->buttons[3] == 1) {
-        set_zeros();
-        RCLCPP_INFO(this->get_logger(), "Motors set zeros.");
+        read_motors();
+        RCLCPP_INFO(this->get_logger(), "Motors read.");
     }
 }
 
@@ -430,6 +430,33 @@ void MotorsNode::reset_motors() {
     publish_right_arm();
 }
 
+void MotorsNode::read_motors(){
+    {
+        std::scoped_lock lock(left_leg_mutex_, right_leg_mutex_, left_arm_mutex_, right_arm_mutex_);
+        for (int i = can0_startID_; i <= can0_endID_; i++) {
+            left_leg_motors[i - can0_startID_]->refresh_motor_status();
+            Timer::ThreadSleepForUs(400);
+        }
+        for (int i = can1_startID_; i <= can1_endID_; i++) {
+            right_leg_motors[i - can1_startID_]->refresh_motor_status();
+            Timer::ThreadSleepForUs(400);
+        }
+        for (int i = can2_startID_; i <= can2_endID_; i++) {
+            left_arm_motors[i - can2_startID_]->refresh_motor_status();
+            Timer::ThreadSleepForUs(400);
+        }
+        for (int i = can3_startID_; i <= can3_endID_; i++) {
+            right_arm_motors[i - can3_startID_]->refresh_motor_status();
+            Timer::ThreadSleepForUs(400);
+        }
+    }
+    Timer::ThreadSleepFor(1000);
+    publish_left_leg();
+    publish_right_leg();
+    publish_left_arm();
+    publish_right_arm();
+}
+
 void MotorsNode::reset_motors_srv(const std::shared_ptr<motors::srv::ResetMotors::Request> request,
                               std::shared_ptr<motors::srv::ResetMotors::Response> response) {
     if(!is_init_){
@@ -455,33 +482,27 @@ void MotorsNode::read_motors_srv(const std::shared_ptr<motors::srv::ReadMotors::
         return;
     }
     try {
-        {
-            std::scoped_lock lock(left_leg_mutex_, right_leg_mutex_, left_arm_mutex_, right_arm_mutex_);
-            for (int i = can0_startID_; i <= can0_endID_; i++) {
-                left_leg_motors[i - can0_startID_]->refresh_motor_status();
-                Timer::ThreadSleepForUs(400);
-            }
-            for (int i = can1_startID_; i <= can1_endID_; i++) {
-                right_leg_motors[i - can1_startID_]->refresh_motor_status();
-                Timer::ThreadSleepForUs(400);
-            }
-            for (int i = can2_startID_; i <= can2_endID_; i++) {
-                left_arm_motors[i - can2_startID_]->refresh_motor_status();
-                Timer::ThreadSleepForUs(400);
-            }
-            for (int i = can3_startID_; i <= can3_endID_; i++) {
-                right_arm_motors[i - can3_startID_]->refresh_motor_status();
-                Timer::ThreadSleepForUs(400);
-            }
-        }
-        Timer::ThreadSleepFor(1000);
-        publish_left_leg();
-        publish_right_leg();
-        publish_left_arm();
-        publish_right_arm();
-
+        read_motors();
         response->success = true;
         response->message = "Motors read successfully";
+    } catch (const std::exception& e) {
+        response->success = false;
+        response->message = e.what();
+    }
+}
+
+void MotorsNode::set_zeros_srv(const std::shared_ptr<motors::srv::SetZeros::Request> request,
+                           std::shared_ptr<motors::srv::SetZeros::Response> response) {
+    if(!is_init_){
+        response->success = false;
+        response->message = "Motors are not initialized, cannot set zeros.";
+        return;
+    }
+    try {
+        set_zeros();
+        Timer::ThreadSleepFor(1000);
+        response->success = true;
+        response->message = "Zeros set successfully";
     } catch (const std::exception& e) {
         response->success = false;
         response->message = e.what();
@@ -537,30 +558,12 @@ void MotorsNode::control_motor_srv(const std::shared_ptr<motors::srv::ControlMot
     }
 }
 
-void MotorsNode::set_zeros_srv(const std::shared_ptr<motors::srv::SetZeros::Request> request,
-                           std::shared_ptr<motors::srv::SetZeros::Response> response) {
-    if(!is_init_){
-        response->success = false;
-        response->message = "Motors are not initialized, cannot set zeros.";
-        return;
-    }
-    try {
-        set_zeros();
-        Timer::ThreadSleepFor(1000);
-        response->success = true;
-        response->message = "Zeros set successfully";
-    } catch (const std::exception& e) {
-        response->success = false;
-        response->message = e.what();
-    }
-}
-
 int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
     auto node = std::make_shared<MotorsNode>();
     RCLCPP_INFO(node->get_logger(), "Press 'X' to initialize/deinitialize motors.");
     RCLCPP_INFO(node->get_logger(), "Press 'A' to reset motors.");
-    RCLCPP_INFO(node->get_logger(), "Press 'Y' to set zeros.");
+    RCLCPP_INFO(node->get_logger(), "Press 'Y' to read motors.");
     try {
         rclcpp::spin(node);
     } catch (const std::runtime_error& e) {
