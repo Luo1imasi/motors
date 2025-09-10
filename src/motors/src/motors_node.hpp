@@ -6,6 +6,7 @@
 #include <motors/srv/set_zeros.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <sensor_msgs/msg/joy.hpp>
 
 #include "close_chain_mapping.hpp"
 #include "motor_driver.hpp"
@@ -128,28 +129,20 @@ class MotorsNode : public rclcpp::Node {
         for (int i = can0_startID_; i <= can0_endID_; i++) {
             left_leg_motors[i - can0_startID_] = MotorDriver::MotorCreate(
                 i, "can0", motors_type_, can0_masterID_offset_, motors_model_[i - can0_startID_]);
-            left_leg_motors[i - can0_startID_]->MotorInit();
-            Timer::ThreadSleepFor(1);
         }
         for (int i = can1_startID_; i <= can1_endID_; i++) {
             right_leg_motors[i - can1_startID_] = MotorDriver::MotorCreate(
                 i, "can1", motors_type_, can1_masterID_offset_, motors_model_[i - can1_startID_]);
-            right_leg_motors[i - can1_startID_]->MotorInit();
-            Timer::ThreadSleepFor(1);
         }
         for (int i = can2_startID_; i <= can2_endID_; i++) {
             left_arm_motors[i - can2_startID_] = MotorDriver::MotorCreate(
                 i, "can2", motors_type_, can2_masterID_offset_, motors_model_[i - can2_startID_ + 7]);
-            left_arm_motors[i - can2_startID_]->MotorInit();
-            Timer::ThreadSleepFor(1);
         }
         for (int i = can3_startID_; i <= can3_endID_; i++) {
             right_arm_motors[i - can3_startID_] = MotorDriver::MotorCreate(
                 i, "can3", motors_type_, can3_masterID_offset_, motors_model_[i - can3_startID_ + 7]);
-            right_arm_motors[i - can3_startID_]->MotorInit();
-            Timer::ThreadSleepFor(1);
         }
-        Timer::ThreadSleepFor(500);
+
         left_leg_subscription_ = this->create_subscription<sensor_msgs::msg::JointState>(
             "/joint_command_left_leg", 1,
             std::bind(&MotorsNode::subs_left_leg_callback, this, std::placeholders::_1));
@@ -162,6 +155,8 @@ class MotorsNode : public rclcpp::Node {
         right_arm_subscription_ = this->create_subscription<sensor_msgs::msg::JointState>(
             "/joint_command_right_arm", 1,
             std::bind(&MotorsNode::subs_right_arm_callback, this, std::placeholders::_1));
+        joy_subscription_ = this->create_subscription<sensor_msgs::msg::Joy>(
+            "/joy", 1, std::bind(&MotorsNode::subs_joy_callback, this, std::placeholders::_1));
         left_leg_publisher_ =
             this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_left_leg", 1);
         right_leg_publisher_ =
@@ -172,55 +167,47 @@ class MotorsNode : public rclcpp::Node {
             this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_right_arm", 1);
         control_motor_service_ = this->create_service<motors::srv::ControlMotor>(
             "control_motor",
-            std::bind(&MotorsNode::control_motor, this, std::placeholders::_1, std::placeholders::_2));
+            std::bind(&MotorsNode::control_motor_srv, this, std::placeholders::_1, std::placeholders::_2));
         reset_motors_service_ = this->create_service<motors::srv::ResetMotors>(
             "reset_motors",
-            std::bind(&MotorsNode::reset_motors, this, std::placeholders::_1, std::placeholders::_2));
+            std::bind(&MotorsNode::reset_motors_srv, this, std::placeholders::_1, std::placeholders::_2));
         read_motors_service_ = this->create_service<motors::srv::ReadMotors>(
             "read_motors",
-            std::bind(&MotorsNode::read_motors, this, std::placeholders::_1, std::placeholders::_2));
+            std::bind(&MotorsNode::read_motors_srv, this, std::placeholders::_1, std::placeholders::_2));
         set_zeros_service_ = this->create_service<motors::srv::SetZeros>(
             "set_zeros",
-            std::bind(&MotorsNode::set_zeros, this, std::placeholders::_1, std::placeholders::_2));
+            std::bind(&MotorsNode::set_zeros_srv, this, std::placeholders::_1, std::placeholders::_2));
     }
     ~MotorsNode() {
-        std::scoped_lock lock(left_leg_mutex_, right_leg_mutex_, left_arm_mutex_, right_arm_mutex_);
-        for (int i = can0_startID_; i <= can0_endID_; i++) {
-            left_leg_motors[i - can0_startID_]->MotorDeInit();
-            Timer::ThreadSleepFor(1);
+        if(is_init_){
+            deinit_motors();
         }
-        for (int i = can1_startID_; i <= can1_endID_; i++) {
-            right_leg_motors[i - can1_startID_]->MotorDeInit();
-            Timer::ThreadSleepFor(1);
-        }
-        for (int i = can2_startID_; i <= can2_endID_; i++) {
-            left_arm_motors[i - can2_startID_]->MotorDeInit();
-            Timer::ThreadSleepFor(1);
-        }
-        for (int i = can3_startID_; i <= can3_endID_; i++) {
-            right_arm_motors[i - can3_startID_]->MotorDeInit();
-            Timer::ThreadSleepFor(1);
-        }
-        RCLCPP_INFO(this->get_logger(), "Motors Deinitialized");
     }
     void publish_left_leg();
     void publish_right_leg();
     void publish_left_arm();
     void publish_right_arm();
+    void subs_joy_callback(const std::shared_ptr<sensor_msgs::msg::Joy> msg);
     void subs_left_leg_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg);
     void subs_right_leg_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg);
     void subs_left_arm_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg);
     void subs_right_arm_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg);
-    void reset_motors(const std::shared_ptr<motors::srv::ResetMotors::Request> request,
+    void reset_motors();
+    void init_motors();
+    void deinit_motors();
+    void set_zeros();
+    void reset_motors_srv(const std::shared_ptr<motors::srv::ResetMotors::Request> request,
                       std::shared_ptr<motors::srv::ResetMotors::Response> response);
-    void read_motors(const std::shared_ptr<motors::srv::ReadMotors::Request> request,
+    void read_motors_srv(const std::shared_ptr<motors::srv::ReadMotors::Request> request,
                      std::shared_ptr<motors::srv::ReadMotors::Response> response);
-    void control_motor(const std::shared_ptr<motors::srv::ControlMotor::Request> request,
+    void control_motor_srv(const std::shared_ptr<motors::srv::ControlMotor::Request> request,
                                std::shared_ptr<motors::srv::ControlMotor::Response> response);
-    void set_zeros(const std::shared_ptr<motors::srv::SetZeros::Request> request,
-                   std::shared_ptr<motors::srv::SetZeros::Response> response); 
+    void set_zeros_srv(const std::shared_ptr<motors::srv::SetZeros::Request> request,
+                   std::shared_ptr<motors::srv::SetZeros::Response> response);
 
    private:
+    bool is_init_ = false;
+    int offline_threshold_ = 10;
     std::string motors_type_;
     std::vector<int> motors_model_;
     std::vector<std::shared_ptr<MotorDriver>> left_leg_motors, right_leg_motors, left_arm_motors,
@@ -239,6 +226,7 @@ class MotorsNode : public rclcpp::Node {
         left_arm_publisher_, right_arm_publisher_;
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr left_leg_subscription_,
         right_leg_subscription_, left_arm_subscription_, right_arm_subscription_;
+    rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_subscription_;
     rclcpp::TimerBase::SharedPtr timer_;
     std::shared_ptr<Decouple> ankle_decouple_;
     Eigen::VectorXd last_left_ankle_pos_, last_left_ankle_vel_, last_right_ankle_pos_, last_right_ankle_vel_;
