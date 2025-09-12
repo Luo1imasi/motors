@@ -1,4 +1,4 @@
-MotorsNode:
+motors_node:
     ros__parameters:
         motors_type: "DM"
         motors_model: [1, 1, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0]

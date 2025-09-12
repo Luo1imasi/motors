@@ -18,7 +18,7 @@ def generate_launch_description():
             Node(
                 package="motors",
                 executable="motors_node",
-                name="MotorsNode",
+                name="motors_node",
                 parameters=[config],
                 output="screen",
                 # prefix=["xterm -e gdb -ex run --args"],

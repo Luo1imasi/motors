@@ -143,28 +143,30 @@ class MotorsNode : public rclcpp::Node {
                 i, "can3", motors_type_, can3_masterID_offset_, motors_model_[i - can3_startID_ + 7]);
         }
 
+        auto sensor_data_qos = rclcpp::QoS(rclcpp::KeepLast(1)).best_effort().durability_volatile();
+        auto control_command_qos = rclcpp::QoS(rclcpp::KeepLast(1)).reliable().durability_volatile();
         left_leg_subscription_ = this->create_subscription<sensor_msgs::msg::JointState>(
-            "/joint_command_left_leg", 1,
+            "/joint_command_left_leg", control_command_qos,
             std::bind(&MotorsNode::subs_left_leg_callback, this, std::placeholders::_1));
         right_leg_subscription_ = this->create_subscription<sensor_msgs::msg::JointState>(
-            "/joint_command_right_leg", 1,
+            "/joint_command_right_leg", control_command_qos,
             std::bind(&MotorsNode::subs_right_leg_callback, this, std::placeholders::_1));
         left_arm_subscription_ = this->create_subscription<sensor_msgs::msg::JointState>(
-            "/joint_command_left_arm", 1,
+            "/joint_command_left_arm", control_command_qos,
             std::bind(&MotorsNode::subs_left_arm_callback, this, std::placeholders::_1));
         right_arm_subscription_ = this->create_subscription<sensor_msgs::msg::JointState>(
-            "/joint_command_right_arm", 1,
+            "/joint_command_right_arm", control_command_qos,
             std::bind(&MotorsNode::subs_right_arm_callback, this, std::placeholders::_1));
         joy_subscription_ = this->create_subscription<sensor_msgs::msg::Joy>(
-            "/joy", 1, std::bind(&MotorsNode::subs_joy_callback, this, std::placeholders::_1));
+            "/joy", sensor_data_qos, std::bind(&MotorsNode::subs_joy_callback, this, std::placeholders::_1));
         left_leg_publisher_ =
-            this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_left_leg", 1);
+            this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_left_leg", sensor_data_qos);
         right_leg_publisher_ =
-            this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_right_leg", 1);
+            this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_right_leg", sensor_data_qos);
         left_arm_publisher_ =
-            this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_left_arm", 1);
+            this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_left_arm", sensor_data_qos);
         right_arm_publisher_ =
-            this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_right_arm", 1);
+            this->create_publisher<sensor_msgs::msg::JointState>("/joint_states_right_arm", sensor_data_qos);
         control_motor_service_ = this->create_service<motors::srv::ControlMotor>(
             "control_motor",
             std::bind(&MotorsNode::control_motor_srv, this, std::placeholders::_1, std::placeholders::_2));
