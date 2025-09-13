@@ -282,7 +282,6 @@ void MotorsNode::init_motors() {
         Timer::ThreadSleepFor(1);
     }
     is_init_.store(true);
-    RCLCPP_INFO(this->get_logger(), "Motors initialized.");
 }
 
 void MotorsNode::deinit_motors() {
@@ -304,7 +303,6 @@ void MotorsNode::deinit_motors() {
         Timer::ThreadSleepFor(1);
     }
     is_init_.store(false);
-    RCLCPP_INFO(this->get_logger(), "Motors deinitialized.");
 }
 
 void MotorsNode::set_zeros() {

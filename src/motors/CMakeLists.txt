@@ -66,8 +66,8 @@ install(TARGETS ${PROJECT_NAME}_node
   RUNTIME DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY launch 
   DESTINATION share/${PROJECT_NAME})
-install(DIRECTORY config/
-  DESTINATION share/${PROJECT_NAME}/config
+install(DIRECTORY config
+  DESTINATION share/${PROJECT_NAME}
 )
 
 ament_export_dependencies(rclcpp sensor_msgs rosidl_default_runtime rosidl_default_generators)
