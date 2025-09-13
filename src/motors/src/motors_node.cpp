@@ -109,7 +109,7 @@ void MotorsNode::publish_right_arm() {
 }
 
 void MotorsNode::subs_left_leg_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg) {
-    if(!is_init_){
+    if(!is_init_.load()){
         RCLCPP_WARN(this->get_logger(), "Motors are not initialized.");
         return;
     }
@@ -147,7 +147,7 @@ void MotorsNode::subs_left_leg_callback(const std::shared_ptr<sensor_msgs::msg::
 }
 
 void MotorsNode::subs_right_leg_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg) {
-    if(!is_init_){
+    if(!is_init_.load()){
         RCLCPP_WARN(this->get_logger(), "Motors are not initialized.");
         return;
     }
@@ -190,7 +190,7 @@ void MotorsNode::subs_right_leg_callback(const std::shared_ptr<sensor_msgs::msg:
 }
 
 void MotorsNode::subs_left_arm_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg) {
-    if(!is_init_){
+    if(!is_init_.load()){
         RCLCPP_WARN(this->get_logger(), "Motors are not initialized.");
         return;
     }
@@ -212,7 +212,7 @@ void MotorsNode::subs_left_arm_callback(const std::shared_ptr<sensor_msgs::msg::
 }
 
 void MotorsNode::subs_right_arm_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg) {
-    if (!is_init_) {
+    if (!is_init_.load()) {
         RCLCPP_WARN(this->get_logger(), "Motors are not initialized.");
         return;
     }
@@ -241,8 +241,8 @@ void MotorsNode::subs_right_arm_callback(const std::shared_ptr<sensor_msgs::msg:
 }
 
 void MotorsNode::subs_joy_callback(const std::shared_ptr<sensor_msgs::msg::Joy> msg) {
-    if (msg->buttons[0] == 1) {
-        if (!is_init_){
+    if (msg->buttons[0] == 1 and msg->buttons[0] != last_button0_) {
+        if (!is_init_.load()){
             init_motors();
             RCLCPP_INFO(this->get_logger(), "Motors initialized.");
         }else{
@@ -250,14 +250,17 @@ void MotorsNode::subs_joy_callback(const std::shared_ptr<sensor_msgs::msg::Joy> 
             RCLCPP_INFO(this->get_logger(), "Motors deinitialized.");
         }
     }
-    if (msg->buttons[1] == 1) {
+    if (msg->buttons[1] == 1 and msg->buttons[1] != last_button1_) {
         reset_motors();
         RCLCPP_INFO(this->get_logger(), "Motors reset.");
     }
-    if (msg->buttons[3] == 1) {
+    if (msg->buttons[3] == 1 and msg->buttons[3] != last_button3_) {
         read_motors();
         RCLCPP_INFO(this->get_logger(), "Motors read.");
     }
+    last_button0_ = msg->buttons[0];
+    last_button1_ = msg->buttons[1];
+    last_button3_ = msg->buttons[3];   
 }
 
 void MotorsNode::init_motors() {
@@ -278,7 +281,7 @@ void MotorsNode::init_motors() {
         right_arm_motors[i - can3_startID_]->MotorInit();
         Timer::ThreadSleepFor(1);
     }
-    is_init_ = true;
+    is_init_.store(true);
     RCLCPP_INFO(this->get_logger(), "Motors initialized.");
 }
 
@@ -300,12 +303,12 @@ void MotorsNode::deinit_motors() {
         right_arm_motors[i - can3_startID_]->MotorDeInit();
         Timer::ThreadSleepFor(1);
     }
-    is_init_ = false;
+    is_init_.store(false);
     RCLCPP_INFO(this->get_logger(), "Motors deinitialized.");
 }
 
 void MotorsNode::set_zeros() {
-    if(!is_init_){
+    if(!is_init_.load()){
         RCLCPP_WARN(this->get_logger(), "Motors are not initialized, cannot set zeros.");
         return;
     }
@@ -331,7 +334,7 @@ void MotorsNode::set_zeros() {
 }
 
 void MotorsNode::reset_motors() {
-    if(!is_init_){
+    if(!is_init_.load()){
         RCLCPP_WARN(this->get_logger(), "Motors are not initialized, cannot reset.");
         return;
     }
@@ -459,7 +462,7 @@ void MotorsNode::read_motors(){
 
 void MotorsNode::reset_motors_srv(const std::shared_ptr<motors::srv::ResetMotors::Request> request,
                               std::shared_ptr<motors::srv::ResetMotors::Response> response) {
-    if(!is_init_){
+    if(!is_init_.load()){
         response->success = false;
         response->message = "Motors are not initialized, cannot reset motors.";
         return;
@@ -476,7 +479,7 @@ void MotorsNode::reset_motors_srv(const std::shared_ptr<motors::srv::ResetMotors
 
 void MotorsNode::read_motors_srv(const std::shared_ptr<motors::srv::ReadMotors::Request> request,
                              std::shared_ptr<motors::srv::ReadMotors::Response> response) {
-    if(!is_init_){
+    if(!is_init_.load()){
         response->success = false;
         response->message = "Motors are not initialized, cannot read motors.";
         return;
@@ -493,7 +496,7 @@ void MotorsNode::read_motors_srv(const std::shared_ptr<motors::srv::ReadMotors::
 
 void MotorsNode::set_zeros_srv(const std::shared_ptr<motors::srv::SetZeros::Request> request,
                            std::shared_ptr<motors::srv::SetZeros::Response> response) {
-    if(!is_init_){
+    if(!is_init_.load()){
         response->success = false;
         response->message = "Motors are not initialized, cannot set zeros.";
         return;
@@ -516,7 +519,7 @@ void MotorsNode::control_motor_srv(const std::shared_ptr<motors::srv::ControlMot
     float position = request->position;
     float velocity = request->velocity;
     float effort = request->effort;
-    if(!is_init_){
+    if(!is_init_.load()){
         response->success = false;
         response->message = "Motors are not initialized, cannot control motor.";
         return;

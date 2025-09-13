@@ -1,5 +1,6 @@
 #pragma once
 #include <chrono>
+#include <atomic>
 #include <motors/srv/control_motor.hpp>
 #include <motors/srv/read_motors.hpp>
 #include <motors/srv/reset_motors.hpp>
@@ -209,7 +210,7 @@ class MotorsNode : public rclcpp::Node {
                                std::shared_ptr<motors::srv::ControlMotor::Response> response);
 
    private:
-    bool is_init_ = false;
+    std::atomic<bool> is_init_{false};
     int offline_threshold_ = 10;
     std::string motors_type_;
     std::vector<int> motors_model_;
@@ -233,4 +234,5 @@ class MotorsNode : public rclcpp::Node {
     rclcpp::TimerBase::SharedPtr timer_;
     std::shared_ptr<Decouple> ankle_decouple_;
     Eigen::VectorXd last_left_ankle_pos_, last_left_ankle_vel_, last_right_ankle_pos_, last_right_ankle_vel_;
+    int last_button0_ = 0, last_button1_ = 0, last_button3_ = 0;
 };
