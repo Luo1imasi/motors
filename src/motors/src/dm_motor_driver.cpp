@@ -132,7 +132,7 @@ bool DmMotorDriver::MotorSetZero() {
 void DmMotorDriver::CanRxMsgCallback(const can_frame& rx_frame) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        response_count--;
+        response_count=0;
     }
     uint16_t master_id_t = 0;
     uint16_t pos_int = 0;
