@@ -14,6 +14,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include <atomic>
 #include <boost/lockfree/queue.hpp>

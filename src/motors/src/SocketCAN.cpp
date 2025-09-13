@@ -41,8 +41,24 @@ void SocketCAN::open(std::string interface) {
         return;
     }
 
+    int flags = fcntl(sockfd_, F_GETFL, 0);
+    if (flags == -1) {
+        logger_->error("Failed to get socket flags");
+        this->close();
+        return;
+    }
+    if (fcntl(sockfd_, F_SETFL, flags | O_NONBLOCK) == -1) {
+        logger_->error("Failed to set socket to non-blocking");
+        this->close();
+        return;
+    }
+
     receiving_ = true;
     receiver_thread_ = std::thread([this]() {
+        pthread_setname_np(pthread_self(), "can_rx");
+        struct sched_param sp{}; sp.sched_priority = 80;
+        pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
+
         fd_set descriptors;
         int maxfd = sockfd_;
         struct timeval timeout;
@@ -56,20 +72,39 @@ void SocketCAN::open(std::string interface) {
             timeout.tv_usec = TIMEOUT_USEC;
 
             if (::select(maxfd + 1, &descriptors, NULL, NULL, &timeout) == 1) {
-                int len = ::read(sockfd_, &rx_frame, CAN_MTU);
-                if (len < 0) {
-                    continue;
-                }
-                auto it = can_callback_list_.find((CanCbkId)(rx_frame.can_id));
-                if (it != can_callback_list_.end()) {
-                    std::lock_guard<std::mutex> lock(can_callback_mutex_);
-                    it->second(rx_frame);
+                while (true){
+                    int len = ::read(sockfd_, &rx_frame, CAN_MTU);
+                    if (len < 0) {
+                        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                            break; 
+                        }
+                        logger_->warn("CAN read error: {}", strerror(errno));
+                        break;
+                    }
+                    if (len == 0){
+                        break;
+                    }
+                    CanCbkFunc callback_to_run;
+                    {
+                        std::lock_guard<std::mutex> lock(can_callback_mutex_);
+                        auto it = can_callback_list_.find((CanCbkId)(rx_frame.can_id));
+                        if (it != can_callback_list_.end()) {
+                            callback_to_run = it->second;
+                        }
+                    }
+                    if (callback_to_run) {
+                        callback_to_run(rx_frame);
+                    }
                 }
             }
         }
     });
 
     sender_thread_ = std::thread([this]() {
+        pthread_setname_np(pthread_self(), "can_tx");
+        struct sched_param sp{}; sp.sched_priority = 70;
+        pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
+
         can_frame tx_frame;
         int count = 0;
         while (receiving_) {
@@ -79,7 +114,7 @@ void SocketCAN::open(std::string interface) {
                 if (!receiving_) break;
                 if (!tx_queue_.pop(tx_frame)) continue;
             }
-            while (!::write(sockfd_, &tx_frame, sizeof(can_frame)) && count < MAX_RETRY_COUNT) {
+            while (::write(sockfd_, &tx_frame, sizeof(can_frame)) < 0 && count < MAX_RETRY_COUNT) {
                 count += 1;
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));  // 避免忙等待
             }
