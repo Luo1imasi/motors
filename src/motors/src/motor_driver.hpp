@@ -230,12 +230,12 @@ class MotorDriver {
 
     uint8_t motor_control_mode_;  // 0:none 1:pos 2:spd 3:mit
 
-    uint8_t error_id_ = 0;
+    std::atomic<uint8_t> error_id_{0};
 
-    float motor_pos_ = 0.f;
-    float motor_spd_ = 0.f;
-    float motor_current_ = 0.f;
-    float motor_temperature_ = 0.f;
+    std::atomic<float> motor_pos_{0.f};
+    std::atomic<float> motor_spd_{0.f};
+    std::atomic<float> motor_current_{0.f};
+    std::atomic<float> motor_temperature_{0.f};
 };
 
 using union32_t = union Union32 {

@@ -34,8 +34,7 @@ void DmMotorDriver::MotorLock() {
 
     can_->transmit(tx_frame);
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-        response_count++;
+        response_count_++;
     }
 }
 
@@ -54,8 +53,7 @@ void DmMotorDriver::MotorUnlock() {
     tx_frame.data[7] = 0xFD;
     can_->transmit(tx_frame);
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-        response_count++;
+        response_count_++;
     }
 }
 
@@ -131,8 +129,7 @@ bool DmMotorDriver::MotorSetZero() {
 
 void DmMotorDriver::CanRxMsgCallback(const can_frame& rx_frame) {
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-        response_count=0;
+        response_count_ = 0;
     }
     uint16_t master_id_t = 0;
     uint16_t pos_int = 0;
@@ -171,8 +168,7 @@ void DmMotorDriver::MotorGetParam(uint8_t param_cmd) {
     tx_frame.data[7] = 0xFF;
     can_->transmit(tx_frame);
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-        response_count++;
+        response_count_++;
     }
 }
 
@@ -203,8 +199,7 @@ void DmMotorDriver::MotorPosModeCmd(float pos, float spd, bool ignore_limit) {
 
     can_->transmit(tx_frame);
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-        response_count++;
+        response_count_++;
     }
 }
 
@@ -226,8 +221,7 @@ void DmMotorDriver::MotorSpdModeCmd(float spd) {
 
     can_->transmit(tx_frame);
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-        response_count++;
+        response_count_++;
     }
 }
 
@@ -266,8 +260,7 @@ void DmMotorDriver::MotorMitModeCmd(float f_p, float f_v, float f_kp, float f_kd
 
     can_->transmit(tx_frame);
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-        response_count++;
+        response_count_++;
     }
 }
 
@@ -291,8 +284,7 @@ void DmMotorDriver::DmMotorSetZero() {
     tx_frame.data[7] = 0xFE;
     can_->transmit(tx_frame);
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-        response_count++;
+        response_count_++;
     }
 }
 
@@ -311,8 +303,7 @@ void DmMotorDriver::DmMotorClearError() {
     tx_frame.data[7] = 0xFB;
     can_->transmit(tx_frame);
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-        response_count++;
+        response_count_++;
     }
 }
 
@@ -336,8 +327,7 @@ void DmMotorDriver::DmWriteRegister(uint8_t rid, float value) {
     tx_frame.data[7] = *(vbuf + 3);
     can_->transmit(tx_frame);
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-        response_count++;
+        response_count_++;
     }
 }
 
@@ -361,8 +351,7 @@ void DmMotorDriver::DmWriteRegister(uint8_t rid, int32_t value) {
     tx_frame.data[7] = *(vbuf + 3);
     can_->transmit(tx_frame);
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-        response_count++;
+        response_count_++;
     }
 }
 
@@ -382,8 +371,7 @@ void DmMotorDriver::DmSaveRegister(uint8_t rid) {
     tx_frame.data[7] = 0xFF;
     can_->transmit(tx_frame);
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-        response_count++;
+        response_count_++;
     }
 }
 
@@ -403,7 +391,6 @@ void DmMotorDriver::refresh_motor_status() {
     tx_frame.data[7] = 0x00;
     can_->transmit(tx_frame);
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-        response_count++;
+        response_count_++;
     }
 }

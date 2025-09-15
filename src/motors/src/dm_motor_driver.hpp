@@ -1,6 +1,6 @@
 #pragma once
 
-#include <mutex>
+#include <atomic>
 #include <string>
 
 #include "motor_driver.hpp"
@@ -92,14 +92,12 @@ class DmMotorDriver : public MotorDriver {
     virtual void MotorResetID() override {};
     virtual void set_motor_control_mode(uint8_t motor_control_mode) override;
     virtual int get_response_count() const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return response_count;
+        return response_count_;
     }
     virtual void refresh_motor_status() override;
 
    private:
-    int response_count = 0;
-    mutable std::mutex mutex_;
+    std::atomic<int> response_count_{0};
     bool param_cmd_flag_[30] = {false};
     const float KpMin = 0.0f;
     const float KpMax = 500.0f;
@@ -107,7 +105,7 @@ class DmMotorDriver : public MotorDriver {
     const float KdMax = 5.0f;
     DM_Motor_Model motor_model_;
     Limit_param limit_param_;
-    uint8_t mos_temperature_ = 0;
+    std::atomic<uint8_t> mos_temperature_{0};
     void DmMotorSetZero();
     void DmMotorClearError();
     void DmWriteRegister(uint8_t rid, float value);
