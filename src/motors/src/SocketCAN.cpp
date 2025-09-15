@@ -102,7 +102,7 @@ void SocketCAN::open(std::string interface) {
 
     sender_thread_ = std::thread([this]() {
         pthread_setname_np(pthread_self(), "can_tx");
-        struct sched_param sp{}; sp.sched_priority = 70;
+        struct sched_param sp{}; sp.sched_priority = 80;
         pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
 
         can_frame tx_frame;

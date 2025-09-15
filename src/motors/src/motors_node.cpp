@@ -562,12 +562,15 @@ void MotorsNode::control_motor_srv(const std::shared_ptr<motors::srv::ControlMot
 int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
     auto node = std::make_shared<MotorsNode>();
+    rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 4);
+    executor.add_node(node);
     RCLCPP_INFO(node->get_logger(), "Press 'X' to initialize/deinitialize motors.");
     RCLCPP_INFO(node->get_logger(), "Press 'A' to reset motors.");
     RCLCPP_INFO(node->get_logger(), "Press 'Y' to read motors.");
     try {
-        rclcpp::spin(node);
+        executor.spin();
     } catch (const std::runtime_error& e) {
+        node->deinit_motors();
         RCLCPP_FATAL(node->get_logger(), "Caught exception: %s", e.what());
     }
     rclcpp::shutdown();
