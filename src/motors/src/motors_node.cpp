@@ -254,13 +254,8 @@ void MotorsNode::subs_joy_callback(const std::shared_ptr<sensor_msgs::msg::Joy> 
         reset_motors();
         RCLCPP_INFO(this->get_logger(), "Motors reset.");
     }
-    if (msg->buttons[3] == 1 and msg->buttons[3] != last_button3_) {
-        read_motors();
-        RCLCPP_INFO(this->get_logger(), "Motors read.");
-    }
     last_button0_ = msg->buttons[0];
     last_button1_ = msg->buttons[1];
-    last_button3_ = msg->buttons[3];   
 }
 
 void MotorsNode::init_motors() {

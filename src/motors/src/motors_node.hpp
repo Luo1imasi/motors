@@ -234,5 +234,5 @@ class MotorsNode : public rclcpp::Node {
     rclcpp::TimerBase::SharedPtr timer_;
     std::shared_ptr<Decouple> ankle_decouple_;
     Eigen::VectorXd last_left_ankle_pos_, last_left_ankle_vel_, last_right_ankle_pos_, last_right_ankle_vel_;
-    int last_button0_ = 0, last_button1_ = 0, last_button3_ = 0;
+    int last_button0_ = 0, last_button1_ = 0;
 };
