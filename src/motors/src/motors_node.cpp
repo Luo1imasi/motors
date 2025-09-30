@@ -113,37 +113,44 @@ void MotorsNode::subs_left_leg_callback(const std::shared_ptr<sensor_msgs::msg::
         RCLCPP_WARN(this->get_logger(), "Motors are not initialized.");
         return;
     }
-    publish_left_leg();
-    Eigen::VectorXd q(2);
-    q << msg->position[4] + joint_default_angle_[4], msg->position[5] + joint_default_angle_[5];
-    Eigen::VectorXd vel(2);
-    vel << msg->velocity[4], msg->velocity[5];
-    Eigen::VectorXd tau(2);
-    tau << msg->effort[4] + kp_[4] * (q[0] - last_left_ankle_pos_[0]) +
-               kd_[4] * (vel[0] - last_left_ankle_vel_[0]),
-        msg->effort[5] + kp_[5] * (q[1] - last_left_ankle_pos_[1]) +
-            kd_[5] * (vel[1] - last_left_ankle_vel_[1]);
-    ankle_decouple_->getDecoupleQVT(last_left_ankle_pos_, vel, tau, true);
-    {
-        std::unique_lock lock(left_leg_mutex_);
-        for (int i = can0_startID_; i <= can0_endID_; i++) {
-            if (i - can0_startID_ == 4 || i - can0_startID_ == 5) {
-                left_leg_motors[i - can0_startID_]->MotorMitModeCmd(q[i - can0_startID_ - 4],
-                                                                    vel[i - can0_startID_ - 4], 0.0, 0.0,
-                                                                    tau[i - can0_startID_ - 4]);
-            } else {
-                left_leg_motors[i - can0_startID_]->MotorMitModeCmd(
-                    msg->position[i - can0_startID_] + joint_default_angle_[i - can0_startID_],
-                    msg->velocity[i - can0_startID_], kp_[i - can0_startID_], kd_[i - can0_startID_],
-                    msg->effort[i - can0_startID_]);
-            }
+    auto task = [this, msg]() {
+        publish_left_leg();
+        Eigen::VectorXd q(2);
+        q << msg->position[4] + joint_default_angle_[4], msg->position[5] + joint_default_angle_[5];
+        Eigen::VectorXd vel(2);
+        vel << msg->velocity[4], msg->velocity[5];
+        Eigen::VectorXd tau(2);
+        tau << msg->effort[4] + kp_[4] * (q[0] - last_left_ankle_pos_[0]) +
+                   kd_[4] * (vel[0] - last_left_ankle_vel_[0]),
+            msg->effort[5] + kp_[5] * (q[1] - last_left_ankle_pos_[1]) +
+                kd_[5] * (vel[1] - last_left_ankle_vel_[1]);
+        ankle_decouple_->getDecoupleQVT(last_left_ankle_pos_, vel, tau, true);
+        {
+            std::unique_lock lock(left_leg_mutex_);
+            for (int i = can0_startID_; i <= can0_endID_; i++) {
+                if (i - can0_startID_ == 4 || i - can0_startID_ == 5) {
+                    left_leg_motors[i - can0_startID_]->MotorMitModeCmd(q[i - can0_startID_ - 4],
+                                                                        vel[i - can0_startID_ - 4], 0.0, 0.0,
+                                                                        tau[i - can0_startID_ - 4]);
+                } else {
+                    left_leg_motors[i - can0_startID_]->MotorMitModeCmd(
+                        msg->position[i - can0_startID_] + joint_default_angle_[i - can0_startID_],
+                        msg->velocity[i - can0_startID_], kp_[i - can0_startID_], kd_[i - can0_startID_],
+                        msg->effort[i - can0_startID_]);
+                }
             Timer::ThreadSleepForUs(200);
-            if(left_leg_motors[i - can0_startID_]->get_response_count() > offline_threshold_){
-                RCLCPP_ERROR(this->get_logger(), "Motor ID %d on CAN0 is offline!", i);
-                throw std::runtime_error("Motor offline, shutting down node.");
+                if(left_leg_motors[i - can0_startID_]->get_response_count() > offline_threshold_){
+                    RCLCPP_ERROR(this->get_logger(), "Motor ID %d on CAN0 is offline!", i);
+                    throw std::runtime_error("Motor offline, shutting down node.");
+                }
             }
         }
+    };
+    {
+        std::unique_lock<std::mutex> lock(queue_mutex_);
+        tasks_.push(task);
     }
+    condition_.notify_one();
 }
 
 void MotorsNode::subs_right_leg_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg) {
@@ -151,42 +158,49 @@ void MotorsNode::subs_right_leg_callback(const std::shared_ptr<sensor_msgs::msg:
         RCLCPP_WARN(this->get_logger(), "Motors are not initialized.");
         return;
     }
-    publish_right_leg();
-    Eigen::VectorXd q(2);
-    q << msg->position[4] + joint_default_angle_[10], msg->position[5] + joint_default_angle_[11];
-    Eigen::VectorXd vel(2);
-    vel << msg->velocity[4], msg->velocity[5];
-    Eigen::VectorXd tau(2);
-    tau << msg->effort[4] + kp_[4] * (q[0] - last_right_ankle_pos_[0]) +
-               kd_[4] * (vel[0] - last_right_ankle_vel_[0]),
-        msg->effort[5] + kp_[5] * (q[1] - last_right_ankle_pos_[1]) +
-            kd_[5] * (vel[1] - last_right_ankle_vel_[1]);
-    ankle_decouple_->getDecoupleQVT(last_right_ankle_pos_, vel, tau, false);
-    {
-        std::unique_lock lock(right_leg_mutex_);
-        for (int i = can1_startID_; i <= can1_endID_; i++) {
-            if (i - can1_startID_ == 4 || i - can1_startID_ == 5) {
-                right_leg_motors[i - can1_startID_]->MotorMitModeCmd(-q[i - can1_startID_ - 4],
-                                                                     -vel[i - can1_startID_ - 4], 0.0, 0.0,
-                                                                     -tau[i - can1_startID_ - 4]);
-            } else if (i - can1_startID_ == 2 || i - can1_startID_ == 3) {
-                right_leg_motors[i - can1_startID_]->MotorMitModeCmd(
-                    -(msg->position[i - can1_startID_] + joint_default_angle_[i - can1_startID_ + 6]),
-                    -msg->velocity[i - can1_startID_], kp_[i - can1_startID_], kd_[i - can1_startID_],
-                    -msg->effort[i - can1_startID_]);
-            } else {
-                right_leg_motors[i - can1_startID_]->MotorMitModeCmd(
-                    msg->position[i - can1_startID_] + joint_default_angle_[i - can1_startID_ + 6],
-                    msg->velocity[i - can1_startID_], kp_[i - can1_startID_], kd_[i - can1_startID_],
-                    msg->effort[i - can1_startID_]);
-            }
+    auto task = [this, msg]() {
+        publish_right_leg();
+        Eigen::VectorXd q(2);
+        q << msg->position[4] + joint_default_angle_[10], msg->position[5] + joint_default_angle_[11];
+        Eigen::VectorXd vel(2);
+        vel << msg->velocity[4], msg->velocity[5];
+        Eigen::VectorXd tau(2);
+        tau << msg->effort[4] + kp_[4] * (q[0] - last_right_ankle_pos_[0]) +
+                   kd_[4] * (vel[0] - last_right_ankle_vel_[0]),
+            msg->effort[5] + kp_[5] * (q[1] - last_right_ankle_pos_[1]) +
+                kd_[5] * (vel[1] - last_right_ankle_vel_[1]);
+        ankle_decouple_->getDecoupleQVT(last_right_ankle_pos_, vel, tau, false);
+        {
+            std::unique_lock lock(right_leg_mutex_);
+            for (int i = can1_startID_; i <= can1_endID_; i++) {
+                if (i - can1_startID_ == 4 || i - can1_startID_ == 5) {
+                    right_leg_motors[i - can1_startID_]->MotorMitModeCmd(-q[i - can1_startID_ - 4],
+                                                                         -vel[i - can1_startID_ - 4], 0.0, 0.0,
+                                                                         -tau[i - can1_startID_ - 4]);
+                } else if (i - can1_startID_ == 2 || i - can1_startID_ == 3) {
+                    right_leg_motors[i - can1_startID_]->MotorMitModeCmd(
+                        -(msg->position[i - can1_startID_] + joint_default_angle_[i - can1_startID_ + 6]),
+                        -msg->velocity[i - can1_startID_], kp_[i - can1_startID_], kd_[i - can1_startID_],
+                        -msg->effort[i - can1_startID_]);
+                } else {
+                    right_leg_motors[i - can1_startID_]->MotorMitModeCmd(
+                        msg->position[i - can1_startID_] + joint_default_angle_[i - can1_startID_ + 6],
+                        msg->velocity[i - can1_startID_], kp_[i - can1_startID_], kd_[i - can1_startID_],
+                        msg->effort[i - can1_startID_]);
+                }
             Timer::ThreadSleepForUs(200);
-            if(right_leg_motors[i - can1_startID_]->get_response_count() > offline_threshold_){
-                RCLCPP_ERROR(this->get_logger(), "Motor ID %d on CAN1 is offline!", i);
-                throw std::runtime_error("Motor offline, shutting down node.");
+                if(right_leg_motors[i - can1_startID_]->get_response_count() > offline_threshold_){
+                    RCLCPP_ERROR(this->get_logger(), "Motor ID %d on CAN1 is offline!", i);
+                    throw std::runtime_error("Motor offline, shutting down node.");
+                }
             }
         }
+    };
+    {
+        std::unique_lock<std::mutex> lock(queue_mutex_);
+        tasks_.push(task);
     }
+    condition_.notify_one();
 }
 
 void MotorsNode::subs_left_arm_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg) {
@@ -194,8 +208,8 @@ void MotorsNode::subs_left_arm_callback(const std::shared_ptr<sensor_msgs::msg::
         RCLCPP_WARN(this->get_logger(), "Motors are not initialized.");
         return;
     }
-    publish_left_arm();
-    {
+    auto task = [this, msg](){
+        publish_left_arm();
         std::unique_lock lock(left_arm_mutex_);
         for (int i = can2_startID_; i <= can2_endID_; i++) {
             left_arm_motors[i - can2_startID_]->MotorMitModeCmd(
@@ -208,7 +222,12 @@ void MotorsNode::subs_left_arm_callback(const std::shared_ptr<sensor_msgs::msg::
                 throw std::runtime_error("Motor offline, shutting down node.");
             }
         }
+    };
+    {
+        std::unique_lock<std::mutex> lock(queue_mutex_);
+        tasks_.push(task);
     }
+    condition_.notify_one();
 }
 
 void MotorsNode::subs_right_arm_callback(const std::shared_ptr<sensor_msgs::msg::JointState> msg) {
@@ -216,8 +235,8 @@ void MotorsNode::subs_right_arm_callback(const std::shared_ptr<sensor_msgs::msg:
         RCLCPP_WARN(this->get_logger(), "Motors are not initialized.");
         return;
     }
-    publish_right_arm();
-    {
+    auto task = [this, msg](){
+        publish_right_arm();
         std::unique_lock lock(right_arm_mutex_);
         for (int i = can3_startID_; i <= can3_endID_; i++) {
             if (i - can3_startID_ == 0 || i - can3_startID_ == 3) {
@@ -237,7 +256,12 @@ void MotorsNode::subs_right_arm_callback(const std::shared_ptr<sensor_msgs::msg:
                 throw std::runtime_error("Motor offline, shutting down node.");
             }
         }
+    };
+    {
+        std::unique_lock<std::mutex> lock(queue_mutex_);
+        tasks_.push(task);
     }
+    condition_.notify_one();
 }
 
 void MotorsNode::subs_joy_callback(const std::shared_ptr<sensor_msgs::msg::Joy> msg) {
@@ -262,19 +286,19 @@ void MotorsNode::init_motors() {
     std::scoped_lock lock(left_leg_mutex_, right_leg_mutex_, left_arm_mutex_, right_arm_mutex_);
     for (int i = can0_startID_; i <= can0_endID_; i++) {
         left_leg_motors[i - can0_startID_]->MotorInit();
-        Timer::ThreadSleepFor(1);
+        Timer::ThreadSleepForUs(200);
     }
     for (int i = can1_startID_; i <= can1_endID_; i++) {
         right_leg_motors[i - can1_startID_]->MotorInit();
-        Timer::ThreadSleepFor(1);
+        Timer::ThreadSleepForUs(200);
     }
     for (int i = can2_startID_; i <= can2_endID_; i++) {
         left_arm_motors[i - can2_startID_]->MotorInit();
-        Timer::ThreadSleepFor(1);
+        Timer::ThreadSleepForUs(200);
     }
     for (int i = can3_startID_; i <= can3_endID_; i++) {
         right_arm_motors[i - can3_startID_]->MotorInit();
-        Timer::ThreadSleepFor(1);
+        Timer::ThreadSleepForUs(200);
     }
     is_init_.store(true);
 }
@@ -283,19 +307,19 @@ void MotorsNode::deinit_motors() {
     std::scoped_lock lock(left_leg_mutex_, right_leg_mutex_, left_arm_mutex_, right_arm_mutex_);
     for (int i = can0_startID_; i <= can0_endID_; i++) {
         left_leg_motors[i - can0_startID_]->MotorDeInit();
-        Timer::ThreadSleepFor(1);
+        Timer::ThreadSleepForUs(200);
     }
     for (int i = can1_startID_; i <= can1_endID_; i++) {
         right_leg_motors[i - can1_startID_]->MotorDeInit();
-        Timer::ThreadSleepFor(1);
+        Timer::ThreadSleepForUs(200);
     }
     for (int i = can2_startID_; i <= can2_endID_; i++) {
         left_arm_motors[i - can2_startID_]->MotorDeInit();
-        Timer::ThreadSleepFor(1);
+        Timer::ThreadSleepForUs(200);
     }
     for (int i = can3_startID_; i <= can3_endID_; i++) {
         right_arm_motors[i - can3_startID_]->MotorDeInit();
-        Timer::ThreadSleepFor(1);
+        Timer::ThreadSleepForUs(200);
     }
     is_init_.store(false);
 }
@@ -309,19 +333,19 @@ void MotorsNode::set_zeros() {
         std::scoped_lock lock(left_leg_mutex_, right_leg_mutex_, left_arm_mutex_, right_arm_mutex_);
         for (int i = can0_startID_; i <= can0_endID_; i++) {
             left_leg_motors[i - can0_startID_]->MotorSetZero();
-            Timer::ThreadSleepFor(1);
+            Timer::ThreadSleepForUs(200);
         }
         for (int i = can1_startID_; i <= can1_endID_; i++) {
             right_leg_motors[i - can1_startID_]->MotorSetZero();
-            Timer::ThreadSleepFor(1);
+            Timer::ThreadSleepForUs(200);
         }
         for (int i = can2_startID_; i <= can2_endID_; i++) {
             left_arm_motors[i - can2_startID_]->MotorSetZero();
-            Timer::ThreadSleepFor(1);
+            Timer::ThreadSleepForUs(200);
         }
         for (int i = can3_startID_; i <= can3_endID_; i++) {
             right_arm_motors[i - can3_startID_]->MotorSetZero();
-            Timer::ThreadSleepFor(1);
+            Timer::ThreadSleepForUs(200);
         }
     }
 }
@@ -341,7 +365,7 @@ void MotorsNode::reset_motors() {
                 left_leg_motors[i - can0_startID_]->MotorMitModeCmd(
                     joint_default_angle_[i - can0_startID_], 0, 40, 2, 0);
             }
-            Timer::ThreadSleepFor(1);
+            Timer::ThreadSleepForUs(200);
         }
         for (int i = can1_startID_; i <= can1_endID_; i++) {
             if (i - can1_startID_ == 4 || i - can1_startID_ == 5) {
@@ -354,12 +378,12 @@ void MotorsNode::reset_motors() {
                 right_leg_motors[i - can1_startID_]->MotorMitModeCmd(
                     joint_default_angle_[i - can1_startID_ + 6], 0, 40, 2, 0);
             }
-            Timer::ThreadSleepFor(1);
+            Timer::ThreadSleepForUs(200);
         }
         for (int i = can2_startID_; i <= can2_endID_; i++) {
             left_arm_motors[i - can2_startID_]->MotorMitModeCmd(
                 joint_default_angle_[i - can2_startID_ + 13], 0, 40, 2, 0);
-            Timer::ThreadSleepFor(1);
+                Timer::ThreadSleepForUs(200);
         }
         for (int i = can3_startID_; i <= can3_endID_; i++) {
             if (i - can3_startID_ == 0 || i - can3_startID_ == 3) {
@@ -369,9 +393,9 @@ void MotorsNode::reset_motors() {
                 right_arm_motors[i - can3_startID_]->MotorMitModeCmd(
                     joint_default_angle_[i - can3_startID_ + 18], 0, 40, 2, 0);
             }
-            Timer::ThreadSleepFor(1);
+            Timer::ThreadSleepForUs(200);
         }
-        Timer::ThreadSleepFor(2000);
+        Timer::ThreadSleepFor(1000);
         for (int i = can0_startID_; i <= can0_endID_; i++) {
             if (i - can0_startID_ == 4 || i - can0_startID_ == 5) {
                 left_leg_motors[i - can0_startID_]->MotorMitModeCmd(
@@ -382,7 +406,7 @@ void MotorsNode::reset_motors() {
                     joint_default_angle_[i - can0_startID_], 0, kp_[i - can0_startID_],
                     kd_[i - can0_startID_], 0);
             }
-            Timer::ThreadSleepFor(1);
+            Timer::ThreadSleepForUs(200);
         }
         for (int i = can1_startID_; i <= can1_endID_; i++) {
             if (i - can1_startID_ == 4 || i - can1_startID_ == 5) {
@@ -398,13 +422,13 @@ void MotorsNode::reset_motors() {
                     joint_default_angle_[i - can1_startID_ + 6], 0, kp_[i - can1_startID_],
                     kd_[i - can1_startID_], 0);
             }
-            Timer::ThreadSleepFor(1);
+            Timer::ThreadSleepForUs(200);
         }
         for (int i = can2_startID_; i <= can2_endID_; i++) {
             left_arm_motors[i - can2_startID_]->MotorMitModeCmd(
                 joint_default_angle_[i - can2_startID_ + 13], 0, kp_[i - can2_startID_ + 7],
                 kd_[i - can2_startID_ + 7], 0);
-            Timer::ThreadSleepFor(1);
+                Timer::ThreadSleepForUs(200);
         }
         for (int i = can3_startID_; i <= can3_endID_; i++) {
             if (i - can3_startID_ == 0 || i - can3_startID_ == 3) {
@@ -416,7 +440,7 @@ void MotorsNode::reset_motors() {
                     joint_default_angle_[i - can3_startID_ + 18], 0, kp_[i - can3_startID_ + 7],
                     kd_[i - can3_startID_ + 7], 0);
             }
-            Timer::ThreadSleepFor(1);
+            Timer::ThreadSleepForUs(200);
         }
     }
     Timer::ThreadSleepFor(1000);
@@ -427,30 +451,54 @@ void MotorsNode::reset_motors() {
 }
 
 void MotorsNode::read_motors(){
-    {
-        std::scoped_lock lock(left_leg_mutex_, right_leg_mutex_, left_arm_mutex_, right_arm_mutex_);
+    auto read_left_leg_task = [this]() {
+        std::unique_lock lock(left_leg_mutex_);
         for (int i = can0_startID_; i <= can0_endID_; i++) {
             left_leg_motors[i - can0_startID_]->refresh_motor_status();
-            Timer::ThreadSleepForUs(400);
+            Timer::ThreadSleepForUs(200);
         }
+        Timer::ThreadSleepForUs(1000);
+        publish_left_leg();
+    };
+
+    auto read_right_leg_task = [this]() {
+        std::unique_lock lock(right_leg_mutex_);
         for (int i = can1_startID_; i <= can1_endID_; i++) {
             right_leg_motors[i - can1_startID_]->refresh_motor_status();
-            Timer::ThreadSleepForUs(400);
+            Timer::ThreadSleepForUs(200);
         }
+        Timer::ThreadSleepForUs(1000);
+        publish_right_leg();
+    };
+
+    auto read_left_arm_task = [this]() {
+        std::unique_lock lock(left_arm_mutex_);
         for (int i = can2_startID_; i <= can2_endID_; i++) {
             left_arm_motors[i - can2_startID_]->refresh_motor_status();
-            Timer::ThreadSleepForUs(400);
+            Timer::ThreadSleepForUs(200);
         }
+        Timer::ThreadSleepForUs(1000);
+        publish_left_arm();
+    };
+
+    auto read_right_arm_task = [this]() {
+        std::unique_lock lock(right_arm_mutex_);
         for (int i = can3_startID_; i <= can3_endID_; i++) {
             right_arm_motors[i - can3_startID_]->refresh_motor_status();
-            Timer::ThreadSleepForUs(400);
+            Timer::ThreadSleepForUs(200);
         }
+        Timer::ThreadSleepForUs(1000);
+        publish_right_arm();
+    };
+
+    {
+        std::unique_lock<std::mutex> lock(queue_mutex_);
+        tasks_.push(read_left_leg_task);
+        tasks_.push(read_right_leg_task);
+        tasks_.push(read_left_arm_task);
+        tasks_.push(read_right_arm_task);
     }
-    Timer::ThreadSleepFor(1000);
-    publish_left_leg();
-    publish_right_leg();
-    publish_left_arm();
-    publish_right_arm();
+    condition_.notify_all();
 }
 
 void MotorsNode::reset_motors_srv(const std::shared_ptr<motors::srv::ResetMotors::Request> request,
@@ -496,7 +544,6 @@ void MotorsNode::set_zeros_srv(const std::shared_ptr<motors::srv::SetZeros::Requ
     }
     try {
         set_zeros();
-        Timer::ThreadSleepFor(1000);
         response->success = true;
         response->message = "Zeros set successfully";
     } catch (const std::exception& e) {

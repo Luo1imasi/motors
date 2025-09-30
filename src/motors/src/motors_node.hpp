@@ -1,6 +1,9 @@
 #pragma once
 #include <chrono>
 #include <atomic>
+#include <condition_variable>
+#include <functional>
+#include <queue>
 #include <motors/srv/control_motor.hpp>
 #include <motors/srv/read_motors.hpp>
 #include <motors/srv/reset_motors.hpp>
@@ -26,6 +29,30 @@ class MotorsNode : public rclcpp::Node {
         last_left_ankle_vel_(2);
         last_right_ankle_pos_(2);
         last_right_ankle_vel_(2);
+
+        for (int i = 0; i < 4; ++i) {
+            worker_threads_.emplace_back([this] {
+                pthread_setname_np(pthread_self(), "thread_pool");
+                struct sched_param sp{}; sp.sched_priority = 70;
+                pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
+                while (true) {
+                    std::function<void()> task;
+                    {
+                        std::unique_lock<std::mutex> lock(this->queue_mutex_);
+                        this->condition_.wait(lock,
+                                              [this] { return this->stop_threads_.load() || !this->tasks_.empty(); });
+                        if (this->stop_threads_.load() && this->tasks_.empty()) {
+                            return;
+                        }
+                        task = std::move(this->tasks_.front());
+                        this->tasks_.pop();
+                    }
+                    if (task) {
+                        task();
+                    }
+                }
+            });
+        }
 
         this->declare_parameter<std::string>("motors_type", "DM");
         this->declare_parameter<std::vector<int>>("motors_model",
@@ -185,6 +212,14 @@ class MotorsNode : public rclcpp::Node {
         if(is_init_){
             deinit_motors();
         }
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex_);
+            stop_threads_.store(true);
+        }
+        condition_.notify_all();
+        for (std::thread &worker : worker_threads_) {
+            worker.join();
+        }
     }
     void publish_left_leg();
     void publish_right_leg();
@@ -235,4 +270,9 @@ class MotorsNode : public rclcpp::Node {
     std::shared_ptr<Decouple> ankle_decouple_;
     Eigen::VectorXd last_left_ankle_pos_, last_left_ankle_vel_, last_right_ankle_pos_, last_right_ankle_vel_;
     int last_button0_ = 0, last_button1_ = 0;
+    std::vector<std::thread> worker_threads_;
+    std::queue<std::function<void()>> tasks_;
+    std::mutex queue_mutex_;
+    std::condition_variable condition_;
+    std::atomic<bool> stop_threads_{false};
 };
