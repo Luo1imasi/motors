@@ -29,8 +29,8 @@
 
 constexpr const int INIT_FD = -1;
 constexpr const int TIMEOUT_SEC = 0;
-constexpr const int TIMEOUT_USEC = 100000;
-constexpr const int TX_QUEUE_SIZE = 1024;
+constexpr const int TIMEOUT_USEC = 1000;
+constexpr const int TX_QUEUE_SIZE = 4096;
 constexpr const int MAX_RETRY_COUNT = 3;
 
 using LFQueue = boost::lockfree::queue<can_frame, boost::lockfree::fixed_sized<true>>;

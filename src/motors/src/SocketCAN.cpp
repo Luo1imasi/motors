@@ -23,6 +23,9 @@ void SocketCAN::open(std::string interface) {
         return;
     }
 
+    int bufsize = 1024 * 1024;  // 1MB
+    setsockopt(sockfd_, SOL_SOCKET, SO_SNDBUF, &bufsize, sizeof(bufsize));
+
     strncpy(if_request_.ifr_name, interface.c_str(), IFNAMSIZ);
     if (ioctl(sockfd_, SIOCGIFINDEX, &if_request_) == -1) {
         logger_->error("Unable to detect CAN interface {}", interface);
@@ -116,7 +119,7 @@ void SocketCAN::open(std::string interface) {
             }
             while (::write(sockfd_, &tx_frame, sizeof(can_frame)) < 0 && count < MAX_RETRY_COUNT) {
                 count += 1;
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));  // 避免忙等待
+                std::this_thread::sleep_for(std::chrono::microseconds(1000));  // 避免忙等待
             }
             if (count >= MAX_RETRY_COUNT) logger_->error("Failed to transmit CAN frame");
             count = 0;
