@@ -4,6 +4,7 @@
 #include <vector>
 #include <cmath>
 #include <Eigen/Dense>
+#include <map>
 
 using namespace std;
 
@@ -45,4 +46,5 @@ public:
 
     void getDecoupleQVT(Eigen::VectorXd &q, Eigen::VectorXd &vel, Eigen::VectorXd &tau, bool leftLegFlag);
     void getForwardQVT(Eigen::VectorXd &q, Eigen::VectorXd &vel, Eigen::VectorXd &tau, bool leftLegFlag);
+    std::map<bool, Eigen::Vector2d> last_solution_;
 };

@@ -70,12 +70,12 @@ Decouple::inverse_kinematics(
     double l_rod[2] = {180, 110}; // # long rod
     double l_spacing = leftLegFlag ? 42.35 : -42.35;  // # spacing between legs
 
-    double short_link_angle_0 = 0 * M_PI / 180;
-    double long_link_angle_0 = 180 * M_PI / 180;
+    double short_link_angle_0 = 180 * M_PI / 180;
+    double long_link_angle_0 = 0 * M_PI / 180;
 
-    double r_B1_0_x = l_bar * cos(long_link_angle_0);
+    double r_B1_0_x = -l_bar * cos(long_link_angle_0);
     double r_B1_0_z = 180 - l_bar * sin(long_link_angle_0);
-    double r_B2_0_x = l_bar * cos(short_link_angle_0);
+    double r_B2_0_x = -l_bar * cos(short_link_angle_0);
     double r_B2_0_z = 110 - l_bar * sin(short_link_angle_0);
 
     // Define points
@@ -123,11 +123,19 @@ Decouple::inverse_kinematics(
 
         double a = r_C_i[0] - r_A_i[0];
         double b = r_A_i[2] - r_C_i[2];
-        double c = (pow(l_rod[i], 2) - pow(l_bar, 2) - pow((r_C_i - r_A_i).norm(), 2)) / (2 * l_bar);
+        double c = (l_rod[i] * l_rod[i] - l_bar * l_bar - (r_C_i - r_A_i).squaredNorm()) / (2 * l_bar);
 
-        double theta_i =
-            asin((b * c + sqrt(pow(b * c, 2) - (pow(a, 2) + pow(b, 2)) * (pow(c, 2) - pow(a, 2)))) /
-                 (pow(a, 2) + pow(b, 2)));
+        double a_sq = a * a;
+        double b_sq = b * b;
+        double c_sq = c * c;
+        double ab_sq_sum = a_sq + b_sq;
+        double discriminant = b_sq * c_sq - ab_sq_sum * (c_sq - a_sq);
+        if (discriminant < 0) {
+            std::cerr << "Warning: Negative discriminant in inverse kinematics. Setting theta_i to 0." << std::endl;
+            discriminant = 0;
+        }
+
+        double theta_i = asin((b * c + sqrt(discriminant)) / ab_sq_sum);
         theta_i = a < 0 ? theta_i : -theta_i;
 
         Eigen::Matrix3d R_y_theta = Eigen::Matrix3d::Zero();
@@ -160,39 +168,34 @@ Decouple::jacobian(const std::vector<Eigen::Vector3d> &r_C,
                    double q_pitch)
 {
     // Assuming r_C, r_bar, r_rod are vectors of Eigen::Vector3d with at least 2 elements each
+    static const Eigen::Vector3d s_unit(0, 1, 0);
+    
+    Eigen::Matrix<double, 2, 6> J_x;
+    J_x << r_rod[0].transpose(), (r_C[0].cross(r_rod[0])).transpose(),
+           r_rod[1].transpose(), (r_C[1].cross(r_rod[1])).transpose();
 
-    Eigen::Vector3d s_11{0, 1, 0}; // A1 point unit direction vector
-    Eigen::Vector3d s_21{0, 1, 0}; // A2 point unit direction vector
+    Eigen::Matrix2d J_theta;
+    J_theta << s_unit.dot(r_bar[0].cross(r_rod[0])), 0,
+               0, s_unit.dot(r_bar[1].cross(r_rod[1]));
+    
+    Eigen::Matrix<double, 6, 2> J_q;
+    J_q << 0, 0,
+           0, 0,
+           0, 0,
+           0, cos(q_pitch),
+           1, 0,
+           0, -sin(q_pitch);
 
-    Eigen::MatrixXd J_x = Eigen::MatrixXd::Zero(2, 6);
-    J_x.block<1, 3>(0, 0) = r_rod[0].transpose();
-    J_x.block<1, 3>(1, 0) = r_rod[1].transpose();
-    J_x.block<1, 3>(0, 3) = (r_C[0].cross(r_rod[0])).transpose();
-    J_x.block<1, 3>(1, 3) = (r_C[1].cross(r_rod[1])).transpose();
-
-    Eigen::MatrixXd J_theta = Eigen::MatrixXd::Zero(2, 2);
-    J_theta(0, 0) = s_11.dot(r_bar[0].cross(r_rod[0]));
-    J_theta(1, 1) = s_21.dot(r_bar[1].cross(r_rod[1]));
-
-    /*after*/
-    Eigen::MatrixXd J_q = Eigen::MatrixXd::Zero(6, 2); // 第一列对应qd_pitch，第二列对应qd_roll
-    J_q(3, 1) = std::cos(q_pitch);
-    J_q(4, 0) = 1;
-    J_q(5, 1) = -std::sin(q_pitch);
-
-    // std::cout << "J_x: " << J_x << std::endl;
-    // std::cout << "J_q: " << J_q << std::endl;
-    // std::cout << "J_x*J_q:" << J_x*J_q << std::endl;
-    Eigen::MatrixXd J_Temp = (J_x * J_q);
-    // Eigen::MatrixXd J_ankle = (J_x*J_q).inverse() * J_theta;
-    Eigen::MatrixXd J_motor2Joint = J_Temp.inverse() * J_theta;
-    Eigen::MatrixXd J_Joint2motor = J_theta.inverse() * J_Temp;
-    // Eigen::MatrixXd J_ankle = (J_x*J_q).completeOrthogonalDecomposition().pseudoInverse() * J_theta;
-    std::vector<Eigen::MatrixXd> J_ankle;
-    J_ankle.push_back(J_motor2Joint);
-    J_ankle.push_back(J_Joint2motor);
+    Eigen::Matrix2d J_Temp = J_x * J_q;
+    
+    Eigen::PartialPivLU<Eigen::Matrix2d> lu_decomp(J_Temp);
+    Eigen::PartialPivLU<Eigen::Matrix2d> lu_theta(J_theta);
+    
+    std::vector<Eigen::MatrixXd> J_ankle(2);
+    J_ankle[0] = lu_decomp.solve(J_theta);
+    J_ankle[1] = lu_theta.solve(J_Temp);
+    
     return J_ankle;
-    /*after*/
 }
 //////********************jacobian***************************//////
 
@@ -215,12 +218,16 @@ Decouple::forwardKinematics(const Eigen::Vector2d &thetaRef, bool leftLegFlag)
 
     int count = 0;
     Eigen::Vector2d f_error{10, 10};
-    Eigen::Vector2d x_c_k{0, 0}; // {pitch, roll}
+    Eigen::Vector2d x_c_k = last_solution_.count(leftLegFlag) ? 
+                            last_solution_[leftLegFlag] : 
+                            Eigen::Vector2d::Zero();
 
     std::vector<Eigen::MatrixXd> Jac;
-
+    static constexpr int MAX_ITERATIONS = 100;
+    static constexpr double TOLERANCE = 1e-3;
+    static constexpr double ALPHA = 0.5;
     /*after*/
-    while (f_error.norm() > 1e-3 && count < 100)
+    while (f_error.norm() > TOLERANCE && count < MAX_ITERATIONS)
     {
         InsKinematicsResult kinematics = inverse_kinematics(x_c_k[1], x_c_k[0], leftLegFlag);
         // printKinematicsResult(kinematics);
@@ -233,27 +240,26 @@ Decouple::forwardKinematics(const Eigen::Vector2d &thetaRef, bool leftLegFlag)
         {
             std::cerr << "Decouple::forwardKinematics() Jac is nan!!" << std::endl;
             std::cerr << "  roll x_c_k[1],pitch  x_c_k[0] n!!" << x_c_k[1] << "   ---   " << x_c_k[0] << std::endl;
-            x_c_k << 0, 0;
-#ifdef TARGET_MUJOCO
-            exit(1);
-#else
             mapping_result.count = -1;
-            mapping_result.ankle_joint_ori = x_c_k;
+            mapping_result.ankle_joint_ori = Eigen::Vector2d::Zero();
             mapping_result.Jac = Jac;
             return mapping_result; // -1 是失败的标记
-#endif
         }
 
-        Eigen::Vector2d thetaCal = Eigen::Vector2d(kinematics.THETA[0], kinematics.THETA[1]);
+        f_error = thetaRef - kinematics.THETA;
 
-        f_error = thetaRef - thetaCal;
-
-        x_c_k = x_c_k + J_motor2Joint * f_error;
+        x_c_k = x_c_k + ALPHA * J_motor2Joint * f_error;
         // std::cout <<  " thetaCal: " << thetaCal << "\n f_error: " << f_error << "\n pitch_roll:" << x_c_k << std::endl;
 
         count++;
     }
     /*after*/
+
+    if (f_error.norm() < TOLERANCE)
+    {
+        last_solution_[leftLegFlag] = x_c_k;
+        // std::cout << leftLegFlag << " Converged in " << count << " iterations." << std::endl;
+    }
 
     mapping_result.count = count;
     mapping_result.ankle_joint_ori = x_c_k;
