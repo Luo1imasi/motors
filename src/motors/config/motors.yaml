@@ -1,6 +1,6 @@
 motors_node:
     ros__parameters:
-        motors_type: "DM"
+        motors_type: "EVO"
         motors_model: [1, 1, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0]
         can0_startID: 1
         can0_endID: 6

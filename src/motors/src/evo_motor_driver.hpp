@@ -96,6 +96,7 @@ class EvoMotorDriver : public MotorDriver {
     void EvoMotorClearError();
     void EvoWriteRegister(uint16_t index, uint8_t subindex, int32_t value);
     void EvoReadRegister(uint16_t index, uint8_t subindex);
+    void EvoSaveRegister(uint8_t rid);
     virtual void CanRxMsgCallback(const can_frame& rx_frame) override;
     std::shared_ptr<SocketCAN> can_;
     
