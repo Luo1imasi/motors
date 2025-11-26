@@ -12,6 +12,7 @@ DmMotorDriver::DmMotorDriver(uint16_t motor_id, std::string can_interface, uint1
     motor_id_ = motor_id;
     master_id_ = motor_id_ + master_id_offset;
     limit_param_ = limit_param[motor_model_];
+    can_interface_ = can_interface;
     CanCbkFunc can_callback = std::bind(&DmMotorDriver::CanRxMsgCallback, this, std::placeholders::_1);
     can_->add_can_callback(can_callback, master_id_);
 }
@@ -60,6 +61,8 @@ void DmMotorDriver::MotorUnlock() {
 uint8_t DmMotorDriver::MotorInit() {
     // send disable command to enter read mode
     DmMotorDriver::MotorUnlock();
+    Timer::ThreadSleepFor(normal_sleep_time);
+    DmMotorDriver::DmMotorClearError();
     Timer::ThreadSleepFor(normal_sleep_time);
     set_motor_control_mode(MIT);
     Timer::ThreadSleepFor(normal_sleep_time);
@@ -113,8 +116,6 @@ bool DmMotorDriver::MotorSetZero() {
     // send set zero command
     DmMotorDriver::DmMotorSetZero();
     Timer::ThreadSleepFor(setup_sleep_time);  // wait for motor to set zero
-    // motor_logger->info("motor_id: %d\tposition: %f\t", motor_id_,
-    //                    get_motor_pos());
     logger_->info("motor_id: {0}\tposition: {1}\t", motor_id_, get_motor_pos());
     DmMotorDriver::MotorUnlock();
     if (get_motor_pos() > judgment_accuracy_threshold || get_motor_pos() < -judgment_accuracy_threshold) {
@@ -141,6 +142,11 @@ void DmMotorDriver::CanRxMsgCallback(const can_frame& rx_frame) {
     master_id_t = rx_frame.can_id;
     if ((rx_frame.data[0] & 0xF0) >> 4 > 7) {  // error code range from 8 to 15
         error_id_ = (rx_frame.data[0] & 0xF0) >> 4;
+        if (error_id_ != DMError::DM_DOWN && error_id_ != DMError::DM_UP) {
+            if (logger_) {
+                logger_->error("can_interface: {0}\tmotor_id: {1}\terror_id: 0x{2:x}", can_interface_, motor_id_, (uint32_t)error_id_);
+            }
+        }
     }
     motor_pos_ =
         range_map(pos_int, uint16_t(0), bitmax<uint16_t>(16), -limit_param_.PosMax, limit_param_.PosMax);
@@ -212,6 +218,7 @@ void DmMotorDriver::MotorSpdModeCmd(float spd) {
     tx_frame.can_id = 0x200 + motor_id_;
     tx_frame.can_dlc = 0x04;
 
+    spd = limit(spd, -limit_param_.SpdMax, limit_param_.SpdMax);
     union32_t rv_type_convert;
     rv_type_convert.f = spd;
     tx_frame.data[0] = rv_type_convert.buf[0];

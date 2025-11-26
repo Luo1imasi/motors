@@ -106,6 +106,7 @@ class DmMotorDriver : public MotorDriver {
     DM_Motor_Model motor_model_;
     Limit_param limit_param_;
     std::atomic<uint8_t> mos_temperature_{0};
+    std::string can_interface_;
     void DmMotorSetZero();
     void DmMotorClearError();
     void DmWriteRegister(uint8_t rid, float value);
