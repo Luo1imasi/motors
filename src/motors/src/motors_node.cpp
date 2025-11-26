@@ -300,6 +300,11 @@ void MotorsNode::init_motors() {
         right_arm_motors[i - can3_startID_]->MotorInit();
         Timer::ThreadSleepForUs(200);
     }
+    Timer::ThreadSleepFor(1000);
+    publish_left_leg();
+    publish_right_leg();
+    publish_left_arm();
+    publish_right_arm();
     is_init_.store(true);
 }
 
