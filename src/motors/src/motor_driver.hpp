@@ -215,13 +215,7 @@ class MotorDriver {
      */
     virtual float get_motor_temperature() { return motor_temperature_; }
 
-    /**
-     * @brief Retrieves the acceleration of the motor.
-     *
-     * This function returns the current acceleration of the motor.
-     *
-     * @return The acceleration of the motor.
-     */
+    virtual void clear_motor_error() = 0;
 
    protected:
     std::shared_ptr<spdlog::logger> logger_;

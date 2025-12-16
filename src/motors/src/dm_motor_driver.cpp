@@ -62,8 +62,6 @@ uint8_t DmMotorDriver::MotorInit() {
     // send disable command to enter read mode
     DmMotorDriver::MotorUnlock();
     Timer::ThreadSleepFor(normal_sleep_time);
-    DmMotorDriver::DmMotorClearError();
-    Timer::ThreadSleepFor(normal_sleep_time);
     set_motor_control_mode(MIT);
     Timer::ThreadSleepFor(normal_sleep_time);
     // send enable command to enter contorl mode
@@ -142,10 +140,8 @@ void DmMotorDriver::CanRxMsgCallback(const can_frame& rx_frame) {
     master_id_t = rx_frame.can_id;
     if ((rx_frame.data[0] & 0xF0) >> 4 > 7) {  // error code range from 8 to 15
         error_id_ = (rx_frame.data[0] & 0xF0) >> 4;
-        if (error_id_ != DMError::DM_DOWN && error_id_ != DMError::DM_UP) {
-            if (logger_) {
-                logger_->error("can_interface: {0}\tmotor_id: {1}\terror_id: 0x{2:x}", can_interface_, motor_id_, (uint32_t)error_id_);
-            }
+        if (logger_) {
+            logger_->error("can_interface: {0}\tmotor_id: {1}\terror_id: 0x{2:x}", can_interface_, motor_id_, (uint32_t)error_id_);
         }
     }
     motor_pos_ =
@@ -400,4 +396,8 @@ void DmMotorDriver::refresh_motor_status() {
     {
         response_count_++;
     }
+}
+
+void DmMotorDriver::clear_motor_error() {
+    DmMotorClearError();
 }

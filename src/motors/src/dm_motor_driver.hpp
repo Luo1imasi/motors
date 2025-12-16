@@ -95,6 +95,7 @@ class DmMotorDriver : public MotorDriver {
         return response_count_;
     }
     virtual void refresh_motor_status() override;
+    virtual void clear_motor_error() override;
 
    private:
     std::atomic<int> response_count_{0};

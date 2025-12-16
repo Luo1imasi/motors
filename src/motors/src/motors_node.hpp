@@ -8,6 +8,7 @@
 #include <motors/srv/read_motors.hpp>
 #include <motors/srv/reset_motors.hpp>
 #include <motors/srv/set_zeros.hpp>
+#include <motors/srv/clear_errors.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <sensor_msgs/msg/joy.hpp>
@@ -207,6 +208,9 @@ class MotorsNode : public rclcpp::Node {
         set_zeros_service_ = this->create_service<motors::srv::SetZeros>(
             "set_zeros",
             std::bind(&MotorsNode::set_zeros_srv, this, std::placeholders::_1, std::placeholders::_2));
+        clear_errors_service_ = this->create_service<motors::srv::ClearErrors>(
+            "clear_errors",
+            std::bind(&MotorsNode::clear_errors_srv, this, std::placeholders::_1, std::placeholders::_2));
     }
     ~MotorsNode() {
         if(is_init_){
@@ -235,6 +239,7 @@ class MotorsNode : public rclcpp::Node {
     void deinit_motors();
     void set_zeros();
     void read_motors();
+    void clear_errors();
     void reset_motors_srv(const std::shared_ptr<motors::srv::ResetMotors::Request> request,
                       std::shared_ptr<motors::srv::ResetMotors::Response> response);
     void read_motors_srv(const std::shared_ptr<motors::srv::ReadMotors::Request> request,
@@ -243,6 +248,8 @@ class MotorsNode : public rclcpp::Node {
                    std::shared_ptr<motors::srv::SetZeros::Response> response);
     void control_motor_srv(const std::shared_ptr<motors::srv::ControlMotor::Request> request,
                                std::shared_ptr<motors::srv::ControlMotor::Response> response);
+    void clear_errors_srv(const std::shared_ptr<motors::srv::ClearErrors::Request> request,
+                          std::shared_ptr<motors::srv::ClearErrors::Response> response);
 
    private:
     std::atomic<bool> is_init_{false};
@@ -261,6 +268,7 @@ class MotorsNode : public rclcpp::Node {
     rclcpp::Service<motors::srv::ResetMotors>::SharedPtr reset_motors_service_;
     rclcpp::Service<motors::srv::ReadMotors>::SharedPtr read_motors_service_;
     rclcpp::Service<motors::srv::SetZeros>::SharedPtr set_zeros_service_;
+    rclcpp::Service<motors::srv::ClearErrors>::SharedPtr clear_errors_service_;
     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr left_leg_publisher_, right_leg_publisher_,
         left_arm_publisher_, right_arm_publisher_;
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr left_leg_subscription_,

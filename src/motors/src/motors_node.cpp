@@ -506,6 +506,26 @@ void MotorsNode::read_motors(){
     condition_.notify_all();
 }
 
+void MotorsNode::clear_errors() {
+    std::scoped_lock lock(left_leg_mutex_, right_leg_mutex_, left_arm_mutex_, right_arm_mutex_);
+    for (int i = can0_startID_; i <= can0_endID_; i++) {
+        left_leg_motors[i - can0_startID_]->clear_motor_error();
+        Timer::ThreadSleepForUs(200);
+    }
+    for (int i = can1_startID_; i <= can1_endID_; i++) {
+        right_leg_motors[i - can1_startID_]->clear_motor_error();
+        Timer::ThreadSleepForUs(200);
+    }
+    for (int i = can2_startID_; i <= can2_endID_; i++) {
+        left_arm_motors[i - can2_startID_]->clear_motor_error();
+        Timer::ThreadSleepForUs(200);
+    }
+    for (int i = can3_startID_; i <= can3_endID_; i++) {
+        right_arm_motors[i - can3_startID_]->clear_motor_error();
+        Timer::ThreadSleepForUs(200);
+    }
+}
+
 void MotorsNode::reset_motors_srv(const std::shared_ptr<motors::srv::ResetMotors::Request> request,
                               std::shared_ptr<motors::srv::ResetMotors::Response> response) {
     if(!is_init_.load()){
@@ -605,6 +625,19 @@ void MotorsNode::control_motor_srv(const std::shared_ptr<motors::srv::ControlMot
         response->message = e.what();
     }
 }
+
+void MotorsNode::clear_errors_srv(const std::shared_ptr<motors::srv::ClearErrors::Request> request,
+                           std::shared_ptr<motors::srv::ClearErrors::Response> response) {
+    try {
+        clear_errors();
+        response->success = true;
+        response->message = "Clear errors successfully";
+    } catch (const std::exception& e) {
+        response->success = false;
+        response->message = e.what();
+    } 
+}
+    
 
 int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
