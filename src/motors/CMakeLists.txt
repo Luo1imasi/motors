@@ -33,6 +33,11 @@ add_library(dm_motors SHARED
   src/motor_driver.cpp
   src/SocketCAN.cpp
 )
+add_library(evo_motors SHARED 
+  src/evo_motor_driver.cpp
+  src/motor_driver.cpp
+  src/SocketCAN.cpp
+)
 set(PUBLIC_DEPENDENCIES
     fmt::fmt spdlog::spdlog ${Boost_LIBRARIES} pthread Eigen3::Eigen)
 target_include_directories(dm_motors
@@ -42,6 +47,13 @@ target_include_directories(dm_motors
 )
 target_link_libraries(dm_motors PUBLIC ${PUBLIC_DEPENDENCIES})
 
+target_include_directories(evo_motors
+  PUBLIC 
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+  $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(evo_motors PUBLIC ${PUBLIC_DEPENDENCIES})
+
 add_executable(${PROJECT_NAME}_node 
                 src/motors_node.cpp
                 src/close_chain_mapping.cpp)
@@ -50,7 +62,7 @@ target_include_directories(${PROJECT_NAME}_node
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
   $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(${PROJECT_NAME}_node PUBLIC ${PUBLIC_DEPENDENCIES} dm_motors)
+target_link_libraries(${PROJECT_NAME}_node PUBLIC ${PUBLIC_DEPENDENCIES} dm_motors evo_motors)
 ament_target_dependencies(${PROJECT_NAME}_node PUBLIC rclcpp sensor_msgs rosidl_default_runtime)
 
 rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
@@ -61,7 +73,7 @@ set_target_properties(${PROJECT_NAME}_node PROPERTIES
     INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib"
 )
 
-install(TARGETS dm_motors
+install(TARGETS dm_motors evo_motors
   LIBRARY DESTINATION lib)
 install(TARGETS ${PROJECT_NAME}_node
   RUNTIME DESTINATION lib/${PROJECT_NAME})
@@ -72,5 +84,5 @@ install(DIRECTORY config
 )
 
 ament_export_dependencies(rclcpp sensor_msgs rosidl_default_runtime rosidl_default_generators)
-ament_export_libraries(dm_motors)
+ament_export_libraries(dm_motors evo_motors)
 ament_package()
