@@ -1,23 +1,26 @@
 #include "evo_motor_driver.hpp"
 
 EVO_Limit_Param evo_limit_param[EVO_Num_Of_Model] = {
-    {12.5, 10.0, 50.0, 250.0, 50.0, 100.0},   // REVO_4310
-    {12.5, 18.0, 150.0, 500.0, 5.0, 150.0},   // ENCOS_8108
+    {12.5, 20.0, 18.0, 250.0, 50.0},   // EVO431040
+    {12.5, 10.0, 50.0, 250.0, 5.0},    // EVO811825
+    {12.5, 10.0, 50.0, 250.0, 5.0},    // EVO811832
 };
 
-EvoMotorDriver::EvoMotorDriver(uint16_t motor_id, std::string can_interface, uint16_t master_id_offset,
+EvoMotorDriver::EvoMotorDriver(uint16_t motor_id, const std::string& interface_type, const std::string& can_interface,
                                EVO_Motor_Model motor_model)
     : MotorDriver(), can_(SocketCAN::get(can_interface)), motor_model_(motor_model) {
+    if (interface_type != "can") {
+        throw std::runtime_error("EVO driver only support CAN interface");
+    }
     motor_id_ = motor_id;
-    master_id_ = motor_id_ + master_id_offset;
     limit_param_ = evo_limit_param[motor_model_];
-    CanCbkFunc can_callback = std::bind(&EvoMotorDriver::CanRxMsgCallback, this, std::placeholders::_1);
-    can_->add_can_callback(can_callback, master_id_);
+    CanCbkFunc can_callback = std::bind(&EvoMotorDriver::can_rx_cbk, this, std::placeholders::_1);
+    can_->add_can_callback(can_callback, motor_id_);
 }
 
-EvoMotorDriver::~EvoMotorDriver() { can_->remove_can_callback(master_id_); }
+EvoMotorDriver::~EvoMotorDriver() { can_->remove_can_callback(motor_id_); }
 
-void EvoMotorDriver::MotorLock() {
+void EvoMotorDriver::lock_motor() {
     can_frame tx_frame;
     tx_frame.can_id = motor_id_;
     tx_frame.can_dlc = 0x08;
@@ -37,7 +40,7 @@ void EvoMotorDriver::MotorLock() {
     }
 }
 
-void EvoMotorDriver::MotorUnlock() {
+void EvoMotorDriver::unlock_motor() {
     can_frame tx_frame;
     tx_frame.can_id = motor_id_;
     tx_frame.can_dlc = 0x08;
@@ -56,17 +59,17 @@ void EvoMotorDriver::MotorUnlock() {
     }
 }
 
-uint8_t EvoMotorDriver::MotorInit() {
+uint8_t EvoMotorDriver::init_motor() {
     // send disable command to enter read mode
-    EvoMotorDriver::MotorUnlock();
-    Timer::ThreadSleepFor(normal_sleep_time);
+    EvoMotorDriver::unlock_motor();
+    Timer::sleep_for(normal_sleep_time);
     set_motor_control_mode(MIT);
-    Timer::ThreadSleepFor(normal_sleep_time);
+    Timer::sleep_for(normal_sleep_time);
     // send enable command to enter contorl mode
-    EvoMotorDriver::MotorLock();
-    Timer::ThreadSleepFor(normal_sleep_time);
+    EvoMotorDriver::lock_motor();
+    Timer::sleep_for(normal_sleep_time);
     EvoMotorDriver::refresh_motor_status();
-    Timer::ThreadSleepFor(normal_sleep_time);
+    Timer::sleep_for(normal_sleep_time);
     switch (error_id_) {
         case EVOError::EVO_OVER_VOLTAGE:
             return EVOError::EVO_OVER_VOLTAGE;
@@ -98,19 +101,19 @@ uint8_t EvoMotorDriver::MotorInit() {
     return error_id_;
 }
 
-void EvoMotorDriver::MotorDeInit() {
-    EvoMotorDriver::MotorUnlock();
-    Timer::ThreadSleepFor(normal_sleep_time);
+void EvoMotorDriver::deinit_motor() {
+    EvoMotorDriver::unlock_motor();
+    Timer::sleep_for(normal_sleep_time);
 }
 
-bool EvoMotorDriver::MotorWriteFlash() { return true; }
+bool EvoMotorDriver::write_motor_flash() { return true; }
 
-bool EvoMotorDriver::MotorSetZero() {
+bool EvoMotorDriver::set_motor_zero() {
     // send set zero command
-    EvoMotorDriver::EvoMotorSetZero();
-    Timer::ThreadSleepFor(setup_sleep_time);  // wait for motor to set zero
+    EvoMotorDriver::set_motor_zero_evo();
+    Timer::sleep_for(setup_sleep_time);  // wait for motor to set zero
     logger_->info("motor_id: {0}\tposition: {1}\t", motor_id_, get_motor_pos());
-    EvoMotorDriver::MotorUnlock();
+    EvoMotorDriver::unlock_motor();
     if (get_motor_pos() > judgment_accuracy_threshold || get_motor_pos() < -judgment_accuracy_threshold) {
         logger_->warn("set zero error");
         return false;
@@ -121,47 +124,30 @@ bool EvoMotorDriver::MotorSetZero() {
     // disable motor
 }
 
-void EvoMotorDriver::CanRxMsgCallback(const can_frame& rx_frame) {
+void EvoMotorDriver::can_rx_cbk(const can_frame& rx_frame) {
     {
         response_count_ = 0;
     }
-    uint16_t master_id_t = 0;
     uint16_t pos_int = 0;
     uint16_t spd_int = 0;
     uint16_t t_int = 0;
     
-    master_id_t = rx_frame.can_id;
-    
-    if (motor_model_ == REVO_4310) {
-        pos_int = rx_frame.data[1] << 8 | rx_frame.data[2];
-        spd_int = rx_frame.data[3] << 4 | (rx_frame.data[4] & 0xF0) >> 4;
-        t_int = (rx_frame.data[4] & 0x0F) << 8 | rx_frame.data[5];
-        error_id_ = rx_frame.data[6];
-        mos_temperature_ = rx_frame.data[7];
-    } else {
-        pos_int = rx_frame.data[1] << 8 | rx_frame.data[2];
-        spd_int = rx_frame.data[3] << 4 | (rx_frame.data[4] & 0xF0) >> 4;
-        t_int = (rx_frame.data[4] & 0x0F) << 8 | rx_frame.data[5];
-        error_id_ = rx_frame.data[0] & 0x1F;
-        mos_temperature_ = rx_frame.data[6];
-        motor_temperature_ = rx_frame.data[7];
-    }
+    pos_int = rx_frame.data[1] << 8 | rx_frame.data[2];
+    spd_int = rx_frame.data[3] << 4 | (rx_frame.data[4] & 0xF0) >> 4;
+    t_int = (rx_frame.data[4] & 0x0F) << 8 | rx_frame.data[5];
+    error_id_ = rx_frame.data[6];
+    mos_temperature_ = rx_frame.data[7];
     
     motor_pos_ = range_map(pos_int, uint16_t(0), bitmax<uint16_t>(16), 
                           -limit_param_.PosMax, limit_param_.PosMax);
     motor_spd_ = range_map(spd_int, uint16_t(0), bitmax<uint16_t>(12), 
                           -limit_param_.SpdMax, limit_param_.SpdMax);
     
-    if (motor_model_ == REVO_4310) {
-        motor_current_ = range_map(t_int, uint16_t(0), bitmax<uint16_t>(12), 
-                                  -limit_param_.TauMax, limit_param_.TauMax);
-    } else {
-        motor_current_ = range_map(t_int, uint16_t(0), bitmax<uint16_t>(12), 
-                                  -limit_param_.CUR_Max, limit_param_.CUR_Max);
-    }
+    motor_current_ = range_map(t_int, uint16_t(0), bitmax<uint16_t>(12), 
+                                -limit_param_.TauMax, limit_param_.TauMax);
 }
 
-void EvoMotorDriver::MotorGetParam(uint8_t param_cmd) {
+void EvoMotorDriver::get_motor_param(uint8_t param_cmd) {
     can_frame tx_frame;
     tx_frame.can_id = 0x600 + motor_id_;
     tx_frame.can_dlc = 0x08;
@@ -184,24 +170,8 @@ void EvoMotorDriver::MotorGetParam(uint8_t param_cmd) {
     }
 }
 
-void EvoMotorDriver::MotorPosModeCmd(float pos, float spd, bool ignore_limit) {
-    if (motor_control_mode_ != MIT) {
-        set_motor_control_mode(MIT);
-        return;
-    }
-    MotorMitModeCmd(pos, 0.0f, 100.0f, 5.0f, 0.0f);
-}
-
-void EvoMotorDriver::MotorSpdModeCmd(float spd) {
-    if (motor_control_mode_ != MIT) {
-        set_motor_control_mode(MIT);
-        return;
-    }
-    MotorMitModeCmd(0.0f, spd, 0.0f, 5.0f, 0.0f);
-}
-
 // Transmit MIT-mDme control(hybrid) package. Called in canTask.
-void EvoMotorDriver::MotorMitModeCmd(float f_p, float f_v, float f_kp, float f_kd, float f_t) {
+void EvoMotorDriver::motor_mit_cmd(float f_p, float f_v, float f_kp, float f_kd, float f_t) {
     if (motor_control_mode_ != MIT) {
         set_motor_control_mode(MIT);
         return;
@@ -211,22 +181,20 @@ void EvoMotorDriver::MotorMitModeCmd(float f_p, float f_v, float f_kp, float f_k
 
     f_p = limit(f_p, -limit_param_.PosMax, limit_param_.PosMax);
     f_v = limit(f_v, -limit_param_.SpdMax, limit_param_.SpdMax);
-    f_kp = limit(f_kp, KpMin, KpMax);
-    f_kd = limit(f_kd, KdMin, getKdMax());
+    f_kp = limit(f_kp, 0.0f, limit_param_.OKpMax);
+    f_kd = limit(f_kd, 0.0f, limit_param_.OKdMax);
     f_t = limit(f_t, -limit_param_.TauMax, limit_param_.TauMax);
-
-    int kd_bits = getKdBitWidth();
     
     p = range_map(f_p, -limit_param_.PosMax, limit_param_.PosMax, uint16_t(0), bitmax<uint16_t>(16));
     v = range_map(f_v, -limit_param_.SpdMax, limit_param_.SpdMax, uint16_t(0), bitmax<uint16_t>(12));
-    kp = range_map(f_kp, KpMin, KpMax, uint16_t(0), bitmax<uint16_t>(12));
-    kd = range_map(f_kd, KdMin, getKdMax(), uint16_t(0), bitmax<uint16_t>(kd_bits));
+    kp = range_map(f_kp, 0.0f, limit_param_.OKpMax, uint16_t(0), bitmax<uint16_t>(12));
+    kd = range_map(f_kd, 0.0f, limit_param_.OKdMax, uint16_t(0), bitmax<uint16_t>(12));
     t = range_map(f_t, -limit_param_.TauMax, limit_param_.TauMax, uint16_t(0), bitmax<uint16_t>(12));
 
     tx_frame.can_id = motor_id_;
     tx_frame.can_dlc = 0x08;
 
-    if (motor_model_ == REVO_4310) {
+    if (motor_model_ == EVO431040) {
         tx_frame.data[0] = p >> 8;
         tx_frame.data[1] = p & 0xFF;
         tx_frame.data[2] = v >> 4;
@@ -257,7 +225,7 @@ void EvoMotorDriver::set_motor_control_mode(uint8_t motor_control_mode) {
     motor_control_mode_ = MIT;
 }
 
-void EvoMotorDriver::EvoMotorSetZero() {
+void EvoMotorDriver::set_motor_zero_evo() {
     can_frame tx_frame;
     tx_frame.can_id = motor_id_;
     tx_frame.can_dlc = 0x08;
@@ -276,7 +244,7 @@ void EvoMotorDriver::EvoMotorSetZero() {
     }
 }
 
-void EvoMotorDriver::EvoMotorClearError() {
+void EvoMotorDriver::clear_motor_error_evo() {
     can_frame tx_frame;
     tx_frame.can_id = motor_id_;
     tx_frame.can_dlc = 0x08;
@@ -295,7 +263,7 @@ void EvoMotorDriver::EvoMotorClearError() {
     }
 }
 
-void EvoMotorDriver::EvoWriteRegister(uint16_t index, uint8_t subindex, int32_t value) {
+void EvoMotorDriver::write_register_evo(uint16_t index, uint8_t subindex, int32_t value) {
     can_frame tx_frame;
     tx_frame.can_id = 0x600 + motor_id_;
     tx_frame.can_dlc = 0x08;
@@ -315,7 +283,7 @@ void EvoMotorDriver::EvoWriteRegister(uint16_t index, uint8_t subindex, int32_t 
     }
 }
 
-void EvoMotorDriver::EvoReadRegister(uint16_t index, uint8_t subindex) {
+void EvoMotorDriver::read_register_evo(uint16_t index, uint8_t subindex) {
     can_frame tx_frame;
     tx_frame.can_id = 0x600 + motor_id_;
     tx_frame.can_dlc = 0x08;
@@ -335,7 +303,7 @@ void EvoMotorDriver::EvoReadRegister(uint16_t index, uint8_t subindex) {
     }
 }
 
-void EvoMotorDriver::EvoSaveRegister(uint8_t rid) {
+void EvoMotorDriver::save_register_evo(uint8_t rid) {
     can_frame tx_frame;
     tx_frame.can_id = 0x600 + motor_id_;
     tx_frame.can_dlc = 0x08;
@@ -374,4 +342,8 @@ void EvoMotorDriver::refresh_motor_status() {
     {
         response_count_++;
     }
+}
+
+void EvoMotorDriver::clear_motor_error() {
+    clear_motor_error_evo();
 }

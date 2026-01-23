@@ -4,6 +4,7 @@
 #include <string>
 
 #include "motor_driver.hpp"
+#include "protocol/can/socket_can.hpp"
 enum EVOError {
     EVO_NO_ERROR = 0x00,
     EVO_OVER_VOLTAGE = 0x01,
@@ -18,8 +19,9 @@ enum EVOError {
 };
 
 enum EVO_Motor_Model { 
-    REVO_4310 = 0,      ///< REVO standard motor (12-bit Kd, OKD_MAX=50.0)
-    ENCOS_8108 = 1,     ///< ENCOS high-performance motor (9-bit Kd, OKD_MAX=5.0)
+    EVO431040 = 0,
+    EVO811825 = 1,
+    EVO811832 = 2,
     EVO_Num_Of_Model 
 };
 
@@ -54,57 +56,45 @@ enum EVO_Flash_Param {
 typedef struct {
     float PosMax;       ///< Maximum position limit (rad)
     float SpdMax;       ///< Maximum velocity limit (rad/s)
-    float TauMax;       ///< Maximum torque/current limit (N·m or A)
-    float OKP_Max;      ///< Maximum outer-loop proportional gain
-    float OKD_Max;      ///< Maximum outer-loop derivative gain
-    float CUR_Max;      ///< Maximum current limit (A)
+    float TauMax;       ///< Maximum torque limit (N·m)
+    float OKpMax;       ///< Maximum outer-loop proportional gain
+    float OKdMax;       ///< Maximum outer-loop derivative gain
 } EVO_Limit_Param;
 
 class EvoMotorDriver : public MotorDriver {
    public:
-    EvoMotorDriver(uint16_t motor_id, std::string can_interface, uint16_t master_id_offset,
+    EvoMotorDriver(uint16_t motor_id, const std::string& interface_type, const std::string& can_interface,
                    EVO_Motor_Model motor_model);
     ~EvoMotorDriver();
 
-    virtual void MotorLock() override;
-    virtual void MotorUnlock() override;
-    virtual uint8_t MotorInit() override;
-    virtual void MotorDeInit() override;
-    virtual bool MotorSetZero() override;
-    virtual bool MotorWriteFlash() override;
+    virtual void lock_motor() override;
+    virtual void unlock_motor() override;
+    virtual uint8_t init_motor() override;
+    virtual void deinit_motor() override;
+    virtual bool set_motor_zero() override;
+    virtual bool write_motor_flash() override;
 
-    virtual void MotorGetParam(uint8_t param_cmd) override;
-    virtual void MotorPosModeCmd(float pos, float spd, bool ignore_limit) override;
-    virtual void MotorSpdModeCmd(float spd) override;
-    virtual void MotorMitModeCmd(float f_p, float f_v, float f_kp, float f_kd, float f_t) override;
-    virtual void MotorResetID() override {};
+    virtual void get_motor_param(uint8_t param_cmd) override;
+    virtual void motor_pos_cmd(float pos, float spd, bool ignore_limit) override {};
+    virtual void motor_spd_cmd(float spd) override {};
+    virtual void motor_mit_cmd(float f_p, float f_v, float f_kp, float f_kd, float f_t) override;
+    virtual void reset_motor_id() override {};
     virtual void set_motor_control_mode(uint8_t motor_control_mode) override;
     virtual int get_response_count() const { 
         return response_count_; 
     }
     virtual void refresh_motor_status() override;
+    virtual void clear_motor_error() override;
    private:
     std::atomic<int> response_count_{0};
-    const float KpMin = 0.0f;
-    const float KpMax = 500.0f;
-    const float KdMin = 0.0f;
-    float KdMax ;
     EVO_Motor_Model motor_model_;
     EVO_Limit_Param limit_param_;
     std::atomic<uint8_t> mos_temperature_{0};
-    void EvoMotorSetZero();
-    void EvoMotorClearError();
-    void EvoWriteRegister(uint16_t index, uint8_t subindex, int32_t value);
-    void EvoReadRegister(uint16_t index, uint8_t subindex);
-    void EvoSaveRegister(uint8_t rid);
-    virtual void CanRxMsgCallback(const can_frame& rx_frame) override;
+    void set_motor_zero_evo();
+    void clear_motor_error_evo();
+    void write_register_evo(uint16_t index, uint8_t subindex, int32_t value);
+    void read_register_evo(uint16_t index, uint8_t subindex);
+    void save_register_evo(uint8_t rid);
+    virtual void can_rx_cbk(const can_frame& rx_frame);
     std::shared_ptr<SocketCAN> can_;
-    
-    inline int getKdBitWidth() const {
-        return (motor_model_ == REVO_4310) ? 12 : 9;
-    }
-    
-    inline float getKdMax() const {
-        return limit_param_.OKD_Max;
-    }
 };

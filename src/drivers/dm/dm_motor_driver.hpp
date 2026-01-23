@@ -4,6 +4,7 @@
 #include <string>
 
 #include "motor_driver.hpp"
+#include "protocol/can/socket_can.hpp"
 enum DMError {
     DM_DOWN = 0x00,
     DM_UP = 0x01,
@@ -16,7 +17,11 @@ enum DMError {
     OVER_LOAD = 0x0E,
 };
 
-enum DM_Motor_Model { DM4340_48V, DM10010L_48V, Num_Of_Motor };
+enum DM_Motor_Model { 
+    DM4340P_48V, 
+    DM10010L_48V, 
+    Num_Of_Motor 
+};
 
 enum DM_REG {
     UV_Value = 0,
@@ -67,29 +72,31 @@ enum DM_REG {
 };
 
 typedef struct {
-    float PosMax;
-    float SpdMax;
-    float TauMax;
-} Limit_param;
+    float PosMax;       ///< Maximum position limit (rad)
+    float SpdMax;       ///< Maximum velocity limit (rad/s)
+    float TauMax;       ///< Maximum torque limit (N·m)
+    float OKpMax;       ///< Maximum outer-loop proportional gain
+    float OKdMax;       ///< Maximum outer-loop derivative gain
+} DM_Limit_Param;
 
 class DmMotorDriver : public MotorDriver {
    public:
-    DmMotorDriver(uint16_t motor_id, std::string can_interface, uint16_t master_id_offset,
+    DmMotorDriver(uint16_t motor_id, const std::string& interface_type, const std::string& can_interface, uint16_t master_id_offset,
                   DM_Motor_Model motor_model);
     ~DmMotorDriver();
 
-    virtual void MotorLock() override;
-    virtual void MotorUnlock() override;
-    virtual uint8_t MotorInit() override;
-    virtual void MotorDeInit() override;
-    virtual bool MotorSetZero() override;
-    virtual bool MotorWriteFlash() override;
+    virtual void lock_motor() override;
+    virtual void unlock_motor() override;
+    virtual uint8_t init_motor() override;
+    virtual void deinit_motor() override;
+    virtual bool set_motor_zero() override;
+    virtual bool write_motor_flash() override;
 
-    virtual void MotorGetParam(uint8_t param_cmd) override;
-    virtual void MotorPosModeCmd(float pos, float spd, bool ignore_limit) override;
-    virtual void MotorSpdModeCmd(float spd) override;
-    virtual void MotorMitModeCmd(float f_p, float f_v, float f_kp, float f_kd, float f_t) override;
-    virtual void MotorResetID() override {};
+    virtual void get_motor_param(uint8_t param_cmd) override;
+    virtual void motor_pos_cmd(float pos, float spd, bool ignore_limit) override;
+    virtual void motor_spd_cmd(float spd) override;
+    virtual void motor_mit_cmd(float f_p, float f_v, float f_kp, float f_kd, float f_t) override;
+    virtual void reset_motor_id() override {};
     virtual void set_motor_control_mode(uint8_t motor_control_mode) override;
     virtual int get_response_count() const {
         return response_count_;
@@ -100,19 +107,15 @@ class DmMotorDriver : public MotorDriver {
    private:
     std::atomic<int> response_count_{0};
     bool param_cmd_flag_[30] = {false};
-    const float KpMin = 0.0f;
-    const float KpMax = 500.0f;
-    const float KdMin = 0.0f;
-    const float KdMax = 5.0f;
     DM_Motor_Model motor_model_;
-    Limit_param limit_param_;
+    DM_Limit_Param limit_param_;
     std::atomic<uint8_t> mos_temperature_{0};
     std::string can_interface_;
-    void DmMotorSetZero();
-    void DmMotorClearError();
-    void DmWriteRegister(uint8_t rid, float value);
-    void DmWriteRegister(uint8_t rid, int32_t value);
-    void DmSaveRegister(uint8_t rid);
-    virtual void CanRxMsgCallback(const can_frame& rx_frame) override;
+    void set_motor_zero_dm();
+    void clear_motor_error_dm();
+    void write_register_dm(uint8_t rid, float value);
+    void write_register_dm(uint8_t rid, int32_t value);
+    void save_register_dm(uint8_t rid);
+    virtual void can_rx_cbk(const can_frame& rx_frame);
     std::shared_ptr<SocketCAN> can_;
 };

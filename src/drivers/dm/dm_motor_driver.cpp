@@ -1,25 +1,28 @@
 // DmMotorDriver.cpp
 #include "dm_motor_driver.hpp"
 
-Limit_param limit_param[Num_Of_Motor] = {
-    {12.5, 20, 28},   // DM4340_48V
-    {12.5, 25, 200},  // DM10010L_48V
+DM_Limit_Param limit_param[Num_Of_Motor] = {
+    {12.5, 20, 28, 500, 5},   // DM4340P_48V
+    {12.5, 25, 200, 500, 5},  // DM10010L_48V
 };
 
-DmMotorDriver::DmMotorDriver(uint16_t motor_id, std::string can_interface, uint16_t master_id_offset,
+DmMotorDriver::DmMotorDriver(uint16_t motor_id, const std::string& interface_type, const std::string& can_interface, uint16_t master_id_offset,
                              DM_Motor_Model motor_model)
     : MotorDriver(), can_(SocketCAN::get(can_interface)), motor_model_(motor_model) {
+    if (interface_type != "can") {
+        throw std::runtime_error("DM driver only support CAN interface");
+    }
     motor_id_ = motor_id;
     master_id_ = motor_id_ + master_id_offset;
     limit_param_ = limit_param[motor_model_];
     can_interface_ = can_interface;
-    CanCbkFunc can_callback = std::bind(&DmMotorDriver::CanRxMsgCallback, this, std::placeholders::_1);
+    CanCbkFunc can_callback = std::bind(&DmMotorDriver::can_rx_cbk, this, std::placeholders::_1);
     can_->add_can_callback(can_callback, master_id_);
 }
 
 DmMotorDriver::~DmMotorDriver() { can_->remove_can_callback(master_id_); }
 
-void DmMotorDriver::MotorLock() {
+void DmMotorDriver::lock_motor() {
     can_frame tx_frame;
     tx_frame.can_id = motor_id_;  // change according to the mode
     tx_frame.can_dlc = 0x08;
@@ -39,7 +42,7 @@ void DmMotorDriver::MotorLock() {
     }
 }
 
-void DmMotorDriver::MotorUnlock() {
+void DmMotorDriver::unlock_motor() {
     can_frame tx_frame;
     tx_frame.can_id = motor_id_;  // change according to the mode
     tx_frame.can_dlc = 0x08;
@@ -58,17 +61,17 @@ void DmMotorDriver::MotorUnlock() {
     }
 }
 
-uint8_t DmMotorDriver::MotorInit() {
+uint8_t DmMotorDriver::init_motor() {
     // send disable command to enter read mode
-    DmMotorDriver::MotorUnlock();
-    Timer::ThreadSleepFor(normal_sleep_time);
+    DmMotorDriver::unlock_motor();
+    Timer::sleep_for(normal_sleep_time);
     set_motor_control_mode(MIT);
-    Timer::ThreadSleepFor(normal_sleep_time);
+    Timer::sleep_for(normal_sleep_time);
     // send enable command to enter contorl mode
-    DmMotorDriver::MotorLock();
-    Timer::ThreadSleepFor(normal_sleep_time);
+    DmMotorDriver::lock_motor();
+    Timer::sleep_for(normal_sleep_time);
     DmMotorDriver::refresh_motor_status();
-    Timer::ThreadSleepFor(normal_sleep_time);
+    Timer::sleep_for(normal_sleep_time);
     switch (error_id_) {
         case DMError::DM_DOWN:
             return DMError::DM_DOWN;
@@ -103,19 +106,19 @@ uint8_t DmMotorDriver::MotorInit() {
     return error_id_;
 }
 
-void DmMotorDriver::MotorDeInit() {
-    DmMotorDriver::MotorUnlock();
-    Timer::ThreadSleepFor(normal_sleep_time);
+void DmMotorDriver::deinit_motor() {
+    DmMotorDriver::unlock_motor();
+    Timer::sleep_for(normal_sleep_time);
 }
 
-bool DmMotorDriver::MotorWriteFlash() { return true; }
+bool DmMotorDriver::write_motor_flash() { return true; }
 
-bool DmMotorDriver::MotorSetZero() {
+bool DmMotorDriver::set_motor_zero() {
     // send set zero command
-    DmMotorDriver::DmMotorSetZero();
-    Timer::ThreadSleepFor(setup_sleep_time);  // wait for motor to set zero
+    DmMotorDriver::set_motor_zero_dm();
+    Timer::sleep_for(setup_sleep_time);  // wait for motor to set zero
     logger_->info("motor_id: {0}\tposition: {1}\t", motor_id_, get_motor_pos());
-    DmMotorDriver::MotorUnlock();
+    DmMotorDriver::unlock_motor();
     if (get_motor_pos() > judgment_accuracy_threshold || get_motor_pos() < -judgment_accuracy_threshold) {
         logger_->warn("set zero error");
         return false;
@@ -126,7 +129,7 @@ bool DmMotorDriver::MotorSetZero() {
     // disable motor
 }
 
-void DmMotorDriver::CanRxMsgCallback(const can_frame& rx_frame) {
+void DmMotorDriver::can_rx_cbk(const can_frame& rx_frame) {
     {
         response_count_ = 0;
     }
@@ -154,7 +157,7 @@ void DmMotorDriver::CanRxMsgCallback(const can_frame& rx_frame) {
     motor_temperature_ = rx_frame.data[7];
 }
 
-void DmMotorDriver::MotorGetParam(uint8_t param_cmd) {
+void DmMotorDriver::get_motor_param(uint8_t param_cmd) {
     can_frame tx_frame;
     tx_frame.can_id = 0x7FF;
     tx_frame.can_dlc = 0x08;
@@ -174,7 +177,7 @@ void DmMotorDriver::MotorGetParam(uint8_t param_cmd) {
     }
 }
 
-void DmMotorDriver::MotorPosModeCmd(float pos, float spd, bool ignore_limit) {
+void DmMotorDriver::motor_pos_cmd(float pos, float spd, bool ignore_limit) {
     if (motor_control_mode_ != POS) {
         set_motor_control_mode(POS);
         return;
@@ -205,7 +208,7 @@ void DmMotorDriver::MotorPosModeCmd(float pos, float spd, bool ignore_limit) {
     }
 }
 
-void DmMotorDriver::MotorSpdModeCmd(float spd) {
+void DmMotorDriver::motor_spd_cmd(float spd) {
     if (motor_control_mode_ != SPD) {
         set_motor_control_mode(SPD);
         return;
@@ -229,7 +232,7 @@ void DmMotorDriver::MotorSpdModeCmd(float spd) {
 }
 
 // Transmit MIT-mDme control(hybrid) package. Called in canTask.
-void DmMotorDriver::MotorMitModeCmd(float f_p, float f_v, float f_kp, float f_kd, float f_t) {
+void DmMotorDriver::motor_mit_cmd(float f_p, float f_v, float f_kp, float f_kd, float f_t) {
     if (motor_control_mode_ != MIT) {
         set_motor_control_mode(MIT);
         return;
@@ -239,14 +242,14 @@ void DmMotorDriver::MotorMitModeCmd(float f_p, float f_v, float f_kp, float f_kd
 
     f_p = limit(f_p, -limit_param_.PosMax, limit_param_.PosMax);
     f_v = limit(f_v, -limit_param_.SpdMax, limit_param_.SpdMax);
-    f_kp = limit(f_kp, KpMin, KpMax);
-    f_kd = limit(f_kd, KdMin, KdMax);
+    f_kp = limit(f_kp, 0.0f, limit_param_.OKpMax);
+    f_kd = limit(f_kd, 0.0f, limit_param_.OKdMax);
     f_t = limit(f_t, -limit_param_.TauMax, limit_param_.TauMax);
 
     p = range_map(f_p, -limit_param_.PosMax, limit_param_.PosMax, uint16_t(0), bitmax<uint16_t>(16));
     v = range_map(f_v, -limit_param_.SpdMax, limit_param_.SpdMax, uint16_t(0), bitmax<uint16_t>(12));
-    kp = range_map(f_kp, KpMin, KpMax, uint16_t(0), bitmax<uint16_t>(12));
-    kd = range_map(f_kd, KdMin, KdMax, uint16_t(0), bitmax<uint16_t>(12));
+    kp = range_map(f_kp, 0.0f, limit_param_.OKpMax, uint16_t(0), bitmax<uint16_t>(12));
+    kd = range_map(f_kd, 0.0f, limit_param_.OKdMax, uint16_t(0), bitmax<uint16_t>(12));
     t = range_map(f_t, -limit_param_.TauMax, limit_param_.TauMax, uint16_t(0), bitmax<uint16_t>(12));
 
     tx_frame.can_id = motor_id_;
@@ -268,11 +271,11 @@ void DmMotorDriver::MotorMitModeCmd(float f_p, float f_v, float f_kp, float f_kd
 }
 
 void DmMotorDriver::set_motor_control_mode(uint8_t motor_control_mode) {
-    DmWriteRegister(10, motor_control_mode);
+    write_register_dm(10, motor_control_mode);
     motor_control_mode_ = motor_control_mode;
 }
 
-void DmMotorDriver::DmMotorSetZero() {
+void DmMotorDriver::set_motor_zero_dm() {
     can_frame tx_frame;
     tx_frame.can_id = motor_id_;  // change according to the mode
     tx_frame.can_dlc = 0x08;
@@ -291,7 +294,7 @@ void DmMotorDriver::DmMotorSetZero() {
     }
 }
 
-void DmMotorDriver::DmMotorClearError() {
+void DmMotorDriver::clear_motor_error_dm() {
     can_frame tx_frame;
     tx_frame.can_id = motor_id_;  // change according to the mode
     tx_frame.can_dlc = 0x08;
@@ -310,7 +313,7 @@ void DmMotorDriver::DmMotorClearError() {
     }
 }
 
-void DmMotorDriver::DmWriteRegister(uint8_t rid, float value) {
+void DmMotorDriver::write_register_dm(uint8_t rid, float value) {
     param_cmd_flag_[rid] = false;
     can_frame tx_frame;
     tx_frame.can_id = 0x7FF;
@@ -334,7 +337,7 @@ void DmMotorDriver::DmWriteRegister(uint8_t rid, float value) {
     }
 }
 
-void DmMotorDriver::DmWriteRegister(uint8_t rid, int32_t value) {
+void DmMotorDriver::write_register_dm(uint8_t rid, int32_t value) {
     param_cmd_flag_[rid] = false;
     can_frame tx_frame;
     tx_frame.can_id = 0x7FF;
@@ -358,7 +361,7 @@ void DmMotorDriver::DmWriteRegister(uint8_t rid, int32_t value) {
     }
 }
 
-void DmMotorDriver::DmSaveRegister(uint8_t rid) {
+void DmMotorDriver::save_register_dm(uint8_t rid) {
     can_frame tx_frame;
     tx_frame.can_id = 0x7FF;
     tx_frame.can_dlc = 0x08;
@@ -399,5 +402,5 @@ void DmMotorDriver::refresh_motor_status() {
 }
 
 void DmMotorDriver::clear_motor_error() {
-    DmMotorClearError();
+    clear_motor_error_dm();
 }

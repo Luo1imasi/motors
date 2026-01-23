@@ -37,6 +37,7 @@ using LFQueue = boost::lockfree::queue<can_frame, boost::lockfree::fixed_sized<t
 using CanCbkFunc = std::function<void(const can_frame &)>;
 using CanCbkId = uint16_t;
 using CanCbkMap = std::unordered_map<CanCbkId, CanCbkFunc>;
+using CanCbkKeyExtractor = std::function<CanCbkId(const can_frame &)>;
 
 class SocketCAN {
    private:
@@ -54,6 +55,9 @@ class SocketCAN {
     std::thread receiver_thread_;
     CanCbkMap can_callback_list_;
     std::mutex can_callback_mutex_;
+    CanCbkKeyExtractor key_extractor_ = [](const can_frame &frame) -> CanCbkId {
+        return static_cast<CanCbkId>(frame.can_id);
+    };
 
     /// Transmitting
     std::thread sender_thread_;
@@ -79,8 +83,8 @@ class SocketCAN {
     void open(std::string interface);
     void close();
     void transmit(const can_frame &frame);
-    void receive();
     void add_can_callback(const CanCbkFunc callback, const CanCbkId id);
     void remove_can_callback(const CanCbkId id);
     void clear_can_callbacks();
+    void set_key_extractor(CanCbkKeyExtractor extractor);
 };

@@ -4,7 +4,7 @@
  * and transmit CAN frames via SocketCAN.
  */
 
-#include "SocketCAN.hpp"
+#include "socket_can.hpp"
 
 std::shared_ptr<spdlog::logger> SocketCAN::logger_ = nullptr;
 std::unordered_map<std::string, std::shared_ptr<SocketCAN>> SocketCAN::instances_;
@@ -90,7 +90,8 @@ void SocketCAN::open(std::string interface) {
                     CanCbkFunc callback_to_run;
                     {
                         std::lock_guard<std::mutex> lock(can_callback_mutex_);
-                        auto it = can_callback_list_.find((CanCbkId)(rx_frame.can_id));
+                        CanCbkId key = key_extractor_(rx_frame);
+                        auto it = can_callback_list_.find(key);
                         if (it != can_callback_list_.end()) {
                             callback_to_run = it->second;
                         }
@@ -159,4 +160,9 @@ void SocketCAN::remove_can_callback(CanCbkId id) {
 void SocketCAN::clear_can_callbacks() {
     std::lock_guard<std::mutex> lock(can_callback_mutex_);
     can_callback_list_.clear();
+}
+
+void SocketCAN::set_key_extractor(CanCbkKeyExtractor extractor) {
+    std::lock_guard<std::mutex> lock(can_callback_mutex_);
+    key_extractor_ = std::move(extractor);
 }

@@ -3,18 +3,15 @@
 #include <spdlog/spdlog.h>
 #include <stdint.h>
 #include <string.h>
-
+#include <iostream>
 #include <cmath>
 #include <functional>
 #include <memory>
 #include <string>
 #include <vector>
 
-#include "SocketCAN.hpp"
-#include "iostream"
-#include "timer.hpp"
 #include "utils.hpp"
-using std::vector;
+
 class MotorDriver {
    public:
     enum MotorControlMode_e {
@@ -31,18 +28,16 @@ class MotorDriver {
     MotorDriver();
     virtual ~MotorDriver() = default;
 
-    static std::shared_ptr<MotorDriver> MotorCreate(uint16_t motor_id, const char* interface,
-                                                    const std::string motor_type, uint16_t master_id_offset,
-                                                    const int motor_model);
+    static std::shared_ptr<MotorDriver> create_motor(uint16_t motor_id, const std::string& interface_type, const std::string& interface,
+                                                    const std::string& motor_type, const int motor_model, uint16_t master_id_offset=0);
 
-    virtual void CanRxMsgCallback(const can_frame& rx_frame) = 0;
     /**
      * @brief Locks the motor to prevent movement.
      *
      * This function locks the motor to prevent any movement.
      * Once locked, the motor will not respond to commands for movement.
      */
-    virtual void MotorLock() = 0;
+    virtual void lock_motor() = 0;
 
     /**
      * @brief Unlocks the motor to allow movement.
@@ -50,7 +45,7 @@ class MotorDriver {
      * This function unlocks the motor to enable movement.
      * After unlocking, the motor can respond to movement commands.
      */
-    virtual void MotorUnlock() = 0;
+    virtual void unlock_motor() = 0;
 
     /**
      * @brief Initializes the motor.
@@ -60,7 +55,7 @@ class MotorDriver {
      *
      * @return True if motor initialization is successful; otherwise, false.
      */
-    virtual uint8_t MotorInit() = 0;
+    virtual uint8_t init_motor() = 0;
 
     /**
      * @brief Deinitializes the motor.
@@ -68,7 +63,7 @@ class MotorDriver {
      * This function deinitializes the motor.
      * It performs cleanup and releases resources associated with motor control.
      */
-    virtual void MotorDeInit() = 0;
+    virtual void deinit_motor() = 0;
 
     /**
      * @brief Sets the motor position to zero.
@@ -78,9 +73,9 @@ class MotorDriver {
      *
      * @return True if setting motor position to zero is successful; otherwise, false.
      */
-    virtual bool MotorSetZero() = 0;
+    virtual bool set_motor_zero() = 0;
 
-    virtual bool MotorWriteFlash() = 0;
+    virtual bool write_motor_flash() = 0;
 
     /**
      * @brief Requests motor parameters based on a specific command.
@@ -90,7 +85,7 @@ class MotorDriver {
      *
      * @param param_cmd The command code specifying which parameter to retrieve.
      */
-    virtual void MotorGetParam(uint8_t param_cmd) = 0;
+    virtual void get_motor_param(uint8_t param_cmd) = 0;
     // to enum and union
 
     /**
@@ -103,7 +98,7 @@ class MotorDriver {
      * @param spd The speed at which the motor should move to the target position.
      * @param ignore_limit If true, ignores any position limits that may be set.
      */
-    virtual void MotorPosModeCmd(float pos, float spd, bool ignore_limit = false) = 0;
+    virtual void motor_pos_cmd(float pos, float spd, bool ignore_limit = false) = 0;
 
     /**
      * @brief Commands the motor to rotate at a specified speed.
@@ -112,7 +107,7 @@ class MotorDriver {
      *
      * @param spd The speed at which the motor should rotate.
      */
-    virtual void MotorSpdModeCmd(float spd) = 0;
+    virtual void motor_spd_cmd(float spd) = 0;
 
     /**
      * @brief Commands the motor to operate in impedance mode with specific parameters.
@@ -126,7 +121,7 @@ class MotorDriver {
      * @param f_kd Damping coefficient.
      * @param f_t Desired torque value.
      */
-    virtual void MotorMitModeCmd(float f_p, float f_v, float f_kp, float f_kd, float f_t) = 0;
+    virtual void motor_mit_cmd(float f_p, float f_v, float f_kp, float f_kd, float f_t) = 0;
 
     /**
      * @brief Sets the control mode for the motor.
@@ -147,10 +142,8 @@ class MotorDriver {
     virtual int get_response_count() const = 0;
     virtual void refresh_motor_status() = 0;
 
-    // to get torque
-    // to get error code
 
-    virtual void MotorResetID() = 0;
+    virtual void reset_motor_id() = 0;
 
     /**
      * @brief Retrieves the ID of the motor.

@@ -6,6 +6,7 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
+#include <thread>
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -95,3 +96,29 @@ inline std::shared_ptr<spdlog::logger> setup_logger(std::vector<spdlog::sink_ptr
     }
     return logger;
 }
+
+class Timer {
+   private:
+    std::chrono::time_point<std::chrono::high_resolution_clock> start_t_;
+    std::chrono::time_point<std::chrono::high_resolution_clock> end_t_;
+
+    std::chrono::milliseconds step_;
+
+   public:
+    Timer(int step) : step_(step) {}
+    ~Timer() {}
+
+    inline void sleep_until() { std::this_thread::sleep_until(end_t_); }
+
+    inline void update_next() {
+        start_t_ = std::chrono::high_resolution_clock::now();
+        end_t_ = start_t_ + step_;
+    }
+
+    static inline void sleep_for(int num_steps) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(num_steps));
+    }
+    static inline void sleep_for_us(int num_steps) {
+        std::this_thread::sleep_for(std::chrono::microseconds(num_steps));
+    }
+};
