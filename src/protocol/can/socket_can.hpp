@@ -61,6 +61,7 @@ class SocketCAN {
 
     /// Transmitting
     std::thread sender_thread_;
+    std::atomic<int> send_sleep_us_{0};
 
     SocketCAN(std::string interface);
 
@@ -87,4 +88,5 @@ class SocketCAN {
     void remove_can_callback(const CanCbkId id);
     void clear_can_callbacks();
     void set_key_extractor(CanCbkKeyExtractor extractor);
+    void set_send_sleep(int us) { send_sleep_us_ = us; }
 };

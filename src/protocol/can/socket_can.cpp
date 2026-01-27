@@ -20,7 +20,7 @@ void SocketCAN::open(std::string interface) {
     sockfd_ = socket(PF_CAN, SOCK_RAW, CAN_RAW);
     if (sockfd_ == INIT_FD) {
         logger_->error("Failed to create CAN socket");
-        return;
+        throw std::runtime_error("Failed to create CAN socket");
     }
 
     int bufsize = 1024 * 1024;  // 1MB
@@ -31,7 +31,7 @@ void SocketCAN::open(std::string interface) {
         logger_->error("Unable to detect CAN interface {}", interface);
 
         this->close();
-        return;
+        throw std::runtime_error("Unable to detect CAN interface " + interface);
     }
 
     // Bind the socket to the network interface
@@ -41,19 +41,19 @@ void SocketCAN::open(std::string interface) {
     if (rc == -1) {
         logger_->error("Failed to bind socket to network interface {}", interface);
         this->close();
-        return;
+        throw std::runtime_error("Failed to bind socket to network interface " + interface);
     }
 
     int flags = fcntl(sockfd_, F_GETFL, 0);
     if (flags == -1) {
         logger_->error("Failed to get socket flags");
         this->close();
-        return;
+        throw std::runtime_error("Failed to get socket flags");
     }
     if (fcntl(sockfd_, F_SETFL, flags | O_NONBLOCK) == -1) {
         logger_->error("Failed to set socket to non-blocking");
         this->close();
-        return;
+        throw std::runtime_error("Failed to set socket to non-blocking");
     }
 
     receiving_ = true;
@@ -122,7 +122,11 @@ void SocketCAN::open(std::string interface) {
                 count += 1;
                 std::this_thread::sleep_for(std::chrono::microseconds(1000));  // 避免忙等待
             }
-            if (count >= MAX_RETRY_COUNT) logger_->error("Failed to transmit CAN frame");
+            if (count >= MAX_RETRY_COUNT) {
+                logger_->error("Failed to transmit CAN frame");
+            } else if (send_sleep_us_ > 0) {
+                std::this_thread::sleep_for(std::chrono::microseconds(send_sleep_us_));
+            }
             count = 0;
         }
     });
