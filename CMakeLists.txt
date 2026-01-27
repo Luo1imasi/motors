@@ -20,11 +20,10 @@ find_package(pybind11 REQUIRED)
 
 set(PUBLIC_DEPENDENCIES
     fmt::fmt spdlog::spdlog ${Boost_LIBRARIES} pthread Eigen3::Eigen)
-set(CMAKE_INSTALL_RPATH "$ORIGIN")
 
 add_subdirectory(src)
 
-add_library(motors SHARED 
+add_library(motors STATIC 
   src/motor_driver.cpp
 )
 
@@ -34,12 +33,12 @@ target_include_directories(motors
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(motors PUBLIC ${PUBLIC_DEPENDENCIES} dm_motors evo_motors can)
+target_link_libraries(motors PUBLIC ${PUBLIC_DEPENDENCIES} dm_motors evo_motors motors_protocol)
 
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY src/ DESTINATION include FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp")
 
-install(TARGETS motors dm_motors evo_motors can
+install(TARGETS motors dm_motors evo_motors motors_protocol
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
   RUNTIME DESTINATION bin
@@ -59,13 +58,16 @@ target_include_directories(motors_py
 
 target_link_libraries(motors_py PUBLIC motors)
 
+set(PYTHON_INSTALL_DIR "lib/python${Python3_VERSION_MAJOR}.${Python3_VERSION_MINOR}/site-packages")
+
 install(TARGETS motors_py
-  LIBRARY DESTINATION lib
-  ARCHIVE DESTINATION lib
-  RUNTIME DESTINATION bin
+  LIBRARY DESTINATION ${PYTHON_INSTALL_DIR}
+  ARCHIVE DESTINATION ${PYTHON_INSTALL_DIR}
+  RUNTIME DESTINATION ${PYTHON_INSTALL_DIR}
 )
 
 
-ament_export_libraries(motors)
+ament_export_libraries(motors dm_motors evo_motors motors_protocol)
 ament_export_include_directories(include)
+
 ament_package()
