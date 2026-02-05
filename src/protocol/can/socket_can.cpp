@@ -64,11 +64,15 @@ void SocketCAN::open(std::string interface) {
             throw std::runtime_error("Failed to set realtime priority for CAN RX thread");
         }
 
-        int cpu_id = 4; 
+        int total_cores = std::thread::hardware_concurrency();
+        if (total_cores == 0) total_cores = 4; // Fallback
+        int cpu_id = total_cores - 1;
+
         char last_char = interface_.back();
         if (isdigit(last_char)) {
             int port_num = last_char - '0';
-            cpu_id += (port_num % 2); 
+            cpu_id = total_cores - 1 - port_num;
+            if (cpu_id < 0) cpu_id = 0; 
         }
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
@@ -126,11 +130,15 @@ void SocketCAN::open(std::string interface) {
             throw std::runtime_error("Failed to set realtime priority for CAN TX thread");
         }
 
-        int cpu_id = 4; 
+        int total_cores = std::thread::hardware_concurrency();
+        if (total_cores == 0) total_cores = 4; // Fallback
+        int cpu_id = total_cores - 1;
+        
         char last_char = interface_.back();
         if (isdigit(last_char)) {
             int port_num = last_char - '0';
-            cpu_id += (port_num % 2); 
+            cpu_id = total_cores - 1 - port_num;
+            if (cpu_id < 0) cpu_id = 0; 
         }
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
