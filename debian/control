@@ -1,0 +1,10 @@
+Package: roboto-motors
+Version: VERSION_PLACEHOLDER
+Section: libs
+Priority: optional
+Architecture: ARCH_PLACEHOLDER
+Depends: roboto-base (>= 1.0.0)
+Maintainer: RoboParty <2321901849@qq.com>
+Description: RoboParty motor driver
+ Motor driver with DM, EVO, Xynova and LeadRobot motor support (CAN protocol).
+ Provides static libraries, headers and Python bindings.

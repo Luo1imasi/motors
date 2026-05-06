@@ -7,10 +7,16 @@
 #include <cmath>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
-#include "utils.hpp"
+enum class CommType {
+    CAN = 0,         // Standard CAN 2.0 (8-byte payload)
+    CANFD = 1,       // Physical CAN-FD (64-byte payload slot)
+    ETHERCAT = 2     // EtherCAT communication
+};
 
 class MotorDriver {
    public:
@@ -30,7 +36,7 @@ class MotorDriver {
 
     static std::shared_ptr<MotorDriver> create_motor(uint16_t motor_id, const std::string& interface_type, const std::string& interface,
                                                     const std::string& motor_type, const int motor_model, uint16_t master_id_offset=0, const double motor_zero_offset=0.0);
-
+    
     /**
      * @brief Locks the motor to prevent movement.
      *
@@ -75,6 +81,18 @@ class MotorDriver {
      */
     virtual bool set_motor_zero() = 0;
 
+    /**
+     * @brief Permanently burns current in-memory motor configuration parameters to Flash.
+     *
+     * This function triggers the motor's internal persistent storage logic, ensuring 
+     * that parameters modified via write_register-style commands (such as ID, 
+     * limits, gains, etc.) are retained after a power cycle or reboot.
+     * * @note For certain motors (e.g., EVO series), this operation may be bundled 
+     * with the set_motor_zero command.
+     *
+     * @return true if the burn command was successfully transmitted.
+     * @return false if the burn command failed to transmit.
+     */
     virtual bool write_motor_flash() = 0;
 
     /**
@@ -124,6 +142,22 @@ class MotorDriver {
     virtual void motor_mit_cmd(float f_p, float f_v, float f_kp, float f_kd, float f_t) = 0;
 
     /**
+     * @brief Commands the motor to operate in impedance (MIT) mode using pointers/arrays.
+     *
+     * This overload is designed for efficient integration with multi-motor batch 
+     * processing or inference engines. It allows passing arrays/pointers of control 
+     * parameters. The specific hardware implementation handles how to extract and 
+     * pack these contiguous memory blocks into bus-specific payloads (e.g. One-to-Many).
+     *
+     * @param f_p  Pointer to the proportional target position (rad).
+     * @param f_v  Pointer to the target velocity (rad/s).
+     * @param f_kp Pointer to the proportional stiffness coefficient (Position gain).
+     * @param f_kd Pointer to the damping coefficient (Velocity gain).
+     * @param f_t  Pointer to the desired feed-forward torque value (Nm).
+     */
+    virtual void motor_mit_cmd(float* f_p, float* f_v, float* f_kp, float* f_kd, float* f_t) = 0;
+
+    /**
      * @brief Sets the control mode for the motor.
      *
      * This function specifies the control mode for the motor.
@@ -140,19 +174,73 @@ class MotorDriver {
      * @return The count of responses received from the motor.
      */
     virtual int get_response_count() const = 0;
+
+    /**
+     * @brief Requests a real-time status update from the physical motor.
+     *
+     * This function sends a query command to the motor to refresh its internal 
+     * telemetry data, such as current position, velocity, and torque/current. 
+     * The retrieved data is typically used to update the driver's internal 
+     * state variables for subsequent getter calls.
+     * * @note In a high-speed control loop, this is often called before 
+     * retrieving feedback to ensure the controller is acting on the most 
+     * recent hardware state.
+     */
     virtual void refresh_motor_status() = 0;
 
+    /**
+     * @brief Clears active error flags and resets the motor's protection state.
+     *
+     * This function sends a command to the motor controller to acknowledge and 
+     * clear internal faults (e.g., over-current, over-voltage, or stall errors). 
+     * If the underlying physical condition causing the error has been resolved, 
+     * the motor will transition from a fault/protection state back to a 
+     * standby or ready state.
+     * * @note This does not fix the root cause of hardware issues; it only attempts 
+     * to reset the software error state of the motor's MCU.
+     */
+    virtual void clear_motor_error() = 0;
 
+    /**
+     * @brief Retrieves the unique identifier (ID) of the motor.
+     *
+     * This function returns the current motor ID stored in the driver instance. 
+     * This ID is used as the primary addressing element on the CAN/CAN-FD bus.
+     *
+     * @return uint8_t The unique ID of the motor.
+     */
+    virtual uint8_t get_motor_id() { return motor_id_; }
+
+    /**
+     * @brief Configures a new ID for the physical motor hardware.
+     *
+     * This function triggers the hardware-specific protocol command to change the 
+     * motor's internal ID. This is typically used during initial commissioning or 
+     * when reconfiguring the robot topology.
+     * * @note Depending on the implementation (e.g., EVO or LRO), this may require 
+     * a subsequent call to write_motor_flash() to persist across power cycles.
+     */
+    virtual void set_motor_id(uint8_t old_id, uint8_t new_id) = 0;
+
+    /**
+     * @brief Resets the motor's hardware ID to the factory default value.
+     *
+     * Sends a protocol command to revert the motor's ID to its default state. 
+     * This is useful for recovering motors with unknown IDs or clearing 
+     * configuration errors during maintenance.
+     */
     virtual void reset_motor_id() = 0;
 
     /**
-     * @brief Retrieves the ID of the motor.
+     * @brief Retrieves the name of the CAN/CAN-FD bus interface associated with the motor.
      *
-     * This function returns the unique identifier (ID) of the motor.
+     * This function returns a string (e.g., "can0", "can9") indicating the specific 
+     * physical bus hardware where the motor instance is connected. It is primarily 
+     * used for debugging, logging, and fault isolation in multi-bus systems.
      *
-     * @return The ID of the motor.
+     * @return std::string The name of the bus interface.
      */
-    virtual uint8_t get_motor_id() { return motor_id_; }
+    virtual std::string get_can_name() { return can_interface_; }
 
     /**
      * @brief Retrieves the control mode of the motor.
@@ -208,8 +296,6 @@ class MotorDriver {
      */
     virtual float get_motor_temperature() { return motor_temperature_; }
 
-    virtual void clear_motor_error() = 0;
-
    protected:
     std::shared_ptr<spdlog::logger> logger_;
     uint16_t motor_id_;
@@ -223,6 +309,9 @@ class MotorDriver {
     std::atomic<float> motor_spd_{0.f};
     std::atomic<float> motor_current_{0.f};
     std::atomic<float> motor_temperature_{0.f};
+
+    CommType comm_type_;
+    std::string can_interface_;
 };
 
 using union32_t = union Union32 {

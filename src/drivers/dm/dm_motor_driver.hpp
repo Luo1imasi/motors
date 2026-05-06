@@ -4,71 +4,74 @@
 #include <string>
 
 #include "motor_driver.hpp"
-#include "protocol/can/socket_can.hpp"
+#include "protocol/can_iso.hpp"
+#include "protocol/canfd_iso.hpp"
+#include "utils.hpp"
+
 enum DMError {
     DM_DOWN = 0x00,
     DM_UP = 0x01,
-    OVER_VOLT = 0x08,
-    UNDER_VOLT = 0x09,
-    OVER_CURRENT = 0x0A,
-    MOS_OVER_TEMP = 0x0B,
-    COIL_OVER_TEMP = 0x0C,
-    LOST_CONN = 0x0D,
-    OVER_LOAD = 0x0E,
+    DM_OVER_VOLT = 0x08,
+    DM_UNDER_VOLT = 0x09,
+    DM_OVER_CURRENT = 0x0A,
+    DM_MOS_OVER_TEMP = 0x0B,
+    DM_COIL_OVER_TEMP = 0x0C,
+    DM_LOST_CONN = 0x0D,
+    DM_OVER_LOAD = 0x0E
 };
 
 enum DM_Motor_Model { 
     DM4340P_48V, 
     DM10010L_48V, 
-    Num_Of_Motor 
+    DM_Num_Of_Motor 
 };
 
 enum DM_REG {
-    UV_Value = 0,
-    KT_Value = 1,
-    OT_Value = 2,
-    OC_Value = 3,
-    ACC = 4,
-    DEC = 5,
-    MAX_SPD = 6,
-    MST_ID = 7,
-    ESC_ID = 8,
-    TIMEOUT = 9,
-    CTRL_MODE = 10,
-    Damp = 11,
-    Inertia = 12,
-    hw_ver = 13,
-    sw_ver = 14,
-    SN = 15,
-    NPP = 16,
-    Rs = 17,
-    LS = 18,
-    Flux = 19,
-    Gr = 20,
-    PMAX = 21,
-    VMAX = 22,
-    TMAX = 23,
-    I_BW = 24,
-    KP_ASR = 25,
-    KI_ASR = 26,
-    KP_APR = 27,
-    KI_APR = 28,
-    OV_Value = 29,
-    GREF = 30,
-    Deta = 31,
-    V_BW = 32,
-    IQ_c1 = 33,
-    VL_c1 = 34,
-    can_br = 35,
-    sub_ver = 36,
-    u_off = 50,
-    v_off = 51,
-    k1 = 52,
-    k2 = 53,
-    m_off = 54,
-    dir = 55,
-    p_m = 80,
-    xout = 81,
+    DM_UV_VALUE = 0,
+    DM_KT_VALUE = 1,
+    DM_OT_VALUE = 2,
+    DM_OC_VALUE = 3,
+    DM_ACC = 4,
+    DM_DEC = 5,
+    DM_MAX_SPD = 6,
+    DM_MST_ID = 7,
+    DM_ESC_ID = 8,
+    DM_TIMEOUT = 9,
+    DM_CTRL_MODE = 10,
+    DM_DAMP = 11,
+    DM_INERTIA = 12,
+    DM_HW_VER = 13,
+    DM_SW_VER = 14,
+    DM_SN = 15,
+    DM_NPP = 16,
+    DM_RS = 17,
+    DM_LS = 18,
+    DM_FLUX = 19,
+    DM_GR = 20,
+    DM_PMAX = 21,
+    DM_VMAX = 22,
+    DM_TMAX = 23,
+    DM_I_BW = 24,
+    DM_KP_ASR = 25,
+    DM_KI_ASR = 26,
+    DM_KP_APR = 27,
+    DM_KI_APR = 28,
+    DM_OV_VALUE = 29,
+    DM_GREF = 30,
+    DM_DETA = 31,
+    DM_V_BW = 32,
+    DM_IQ_C1 = 33,
+    DM_VL_C1 = 34,
+    DM_CAN_BR = 35,
+    DM_SUB_VER = 36,
+    DM_U_OFF = 50,
+    DM_V_OFF = 51,
+    DM_K1 = 52,
+    DM_K2 = 53,
+    DM_M_OFF = 54,
+    DM_DIR = 55,
+    DM_P_M = 80,
+    DM_XOUT = 81
 };
 
 typedef struct {
@@ -91,32 +94,37 @@ class DmMotorDriver : public MotorDriver {
     virtual void deinit_motor() override;
     virtual bool set_motor_zero() override;
     virtual bool write_motor_flash() override;
-
     virtual void get_motor_param(uint8_t param_cmd) override;
+    
     virtual void motor_pos_cmd(float pos, float spd, bool ignore_limit) override;
     virtual void motor_spd_cmd(float spd) override;
     virtual void motor_mit_cmd(float f_p, float f_v, float f_kp, float f_kd, float f_t) override;
-    virtual void reset_motor_id() override {};
+    virtual void motor_mit_cmd(float* f_p, float* f_v, float* f_kp, float* f_kd, float* f_t) override {};
     virtual void set_motor_control_mode(uint8_t motor_control_mode) override;
     virtual int get_response_count() const {
         return response_count_;
     }
+    virtual void set_motor_id(uint8_t old_id, uint8_t new_id) override {};
+    virtual void reset_motor_id() override {};
     virtual void refresh_motor_status() override;
     virtual void clear_motor_error() override;
 
    private:
     uint16_t master_id_;
-    std::atomic<int> response_count_{0};
     bool param_cmd_flag_[30] = {false};
+
+    std::atomic<int> response_count_{0};
     DM_Motor_Model motor_model_;
     DM_Limit_Param limit_param_;
     std::atomic<uint8_t> mos_temperature_{0};
-    std::string can_interface_;
     void set_motor_zero_dm();
     void clear_motor_error_dm();
     void write_register_dm(uint8_t rid, float value);
     void write_register_dm(uint8_t rid, int32_t value);
     void save_register_dm();
+
     virtual void can_rx_cbk(const can_frame& rx_frame);
-    std::shared_ptr<MotorsSocketCAN> can_;
+    virtual void canfd_rx_cbk(const canfd_frame& rx_frame);
+    std::shared_ptr<MotorsCAN> can_;
+    std::shared_ptr<MotorsCANFD> canfd_;
 };

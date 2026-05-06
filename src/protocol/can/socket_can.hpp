@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include "can_iso.hpp"
+
 #include <linux/can.h>
 #include <net/if.h>
 #include <pthread.h>
@@ -34,12 +36,8 @@ constexpr const int TX_QUEUE_SIZE = 4096;
 constexpr const int MAX_RETRY_COUNT = 3;
 
 using LFQueue = boost::lockfree::queue<can_frame, boost::lockfree::fixed_sized<true>>;
-using CanCbkFunc = std::function<void(const can_frame &)>;
-using CanCbkId = uint16_t;
-using CanCbkMap = std::unordered_map<CanCbkId, CanCbkFunc>;
-using CanCbkKeyExtractor = std::function<CanCbkId(const can_frame &)>;
 
-class MotorsSocketCAN {
+class MotorsSocketCAN : public MotorsCAN {
    private:
     std::string interface_;  // The network interface name
     int sockfd_ = -1;        // The file descriptor for the CAN socket
@@ -63,38 +61,31 @@ class MotorsSocketCAN {
     std::thread sender_thread_;
     std::atomic<int> send_sleep_us_{0};
 
-    MotorsSocketCAN(std::string interface);
+    MotorsSocketCAN(const std::string& interface);
 
-    static std::shared_ptr<MotorsSocketCAN> createInstance(const std::string &interface) {
+    static std::shared_ptr<MotorsSocketCAN> createInstance(const std::string& interface) {
         return std::shared_ptr<MotorsSocketCAN>(new MotorsSocketCAN(interface));
     }
-    static std::shared_ptr<spdlog::logger> logger_;
     static std::unordered_map<std::string, std::shared_ptr<MotorsSocketCAN>> instances_;
+
+    void open(const std::string& interface);
+    void close();
 
    public:
     MotorsSocketCAN(const MotorsSocketCAN &) = delete;
     MotorsSocketCAN &operator=(const MotorsSocketCAN &) = delete;
-    ~MotorsSocketCAN();
-    static void init_logger(std::shared_ptr<spdlog::logger> logger) { logger_ = logger; }
-    static std::shared_ptr<MotorsSocketCAN> get(std::string interface) {
-        if (!logger_) {
-            logger_ = spdlog::get("motors");
-            if (!logger_) {
-                std::vector<spdlog::sink_ptr> sinks;
-                sinks.push_back(std::make_shared<spdlog::sinks::stderr_color_sink_st>());
-                logger_ = std::make_shared<spdlog::logger>("motors", std::begin(sinks), std::end(sinks));
-                spdlog::register_logger(logger_);
-            }
-        }
-        if (instances_.find(interface) == instances_.end()) instances_[interface] = createInstance(interface);
-        return instances_[interface];
-    }
-    void open(std::string interface);
-    void close();
-    void transmit(const can_frame &frame);
-    void add_can_callback(const CanCbkFunc callback, const CanCbkId id);
-    void remove_can_callback(const CanCbkId id);
-    void clear_can_callbacks();
-    void set_key_extractor(CanCbkKeyExtractor extractor);
+    ~MotorsSocketCAN() override;
+
+    static std::shared_ptr<MotorsSocketCAN> get(const std::string& interface);
+
+    void transmit(const can_frame& frame) override;
+    void add_can_callback(const CanCbkFunc& callback, CanCbkId id) override;
+    void remove_can_callback(CanCbkId id) override;
+    void clear_can_callbacks() override;
+    void set_can_key_extractor(CanCbkKeyExtractor extractor) override;
+
     void set_send_sleep(int us) { send_sleep_us_ = us; }
+
+    /// SocketCAN-specific: direct socket fd access (for advanced use).
+    int get_fd() const { return sockfd_; }
 };

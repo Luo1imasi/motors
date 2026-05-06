@@ -1,41 +1,48 @@
 /**
  * @file
  * This file implements functions to receive
- * and transmit CAN frames via SocketCAN.
+ * and transmit CAN-FD frames via SocketCAN.
  */
 
-#include "socket_can.hpp"
+#include "socket_canfd.hpp"
 #include <spdlog/sinks/stdout_color_sinks.h>
 
-// MotorsCAN static members
-std::shared_ptr<MotorsCAN> MotorsCAN::get(const std::string& interface, const std::string& backend) {
+// MotorsCANFD static members
+std::shared_ptr<MotorsCANFD> MotorsCANFD::get(const std::string& interface, const std::string& backend) {
     ensure_logger();
     if (backend == "socketcan") {
-        return MotorsSocketCAN::get(interface);
+        return MotorsSocketCANFD::get(interface);
     }
-    throw std::runtime_error("Unknown CAN backend: " + backend);
+    throw std::runtime_error("Unknown CANFD backend: " + backend);
 }
 
-// MotorsSocketCAN static members
-std::unordered_map<std::string, std::shared_ptr<MotorsSocketCAN>> MotorsSocketCAN::instances_;
+// MotorsSocketCANFD static members
+std::unordered_map<std::string, std::shared_ptr<MotorsSocketCANFD>> MotorsSocketCANFD::instances_;
 
-std::shared_ptr<MotorsSocketCAN> MotorsSocketCAN::get(const std::string& interface) {
+std::shared_ptr<MotorsSocketCANFD> MotorsSocketCANFD::get(const std::string& interface) {
     if (instances_.find(interface) == instances_.end()) instances_[interface] = createInstance(interface);
     return instances_[interface];
 }
 
-MotorsSocketCAN::MotorsSocketCAN(const std::string& interface)
-    : interface_(interface), sockfd_(INIT_FD), receiving_(false), tx_queue_(TX_QUEUE_SIZE) {
+MotorsSocketCANFD::MotorsSocketCANFD(const std::string& interface)
+    : interface_(interface), sockfd_(FD_INIT_FD), receiving_(false), tx_queue_(FD_TX_QUEUE_SIZE) {
     open(interface);
 }
 
-MotorsSocketCAN::~MotorsSocketCAN() { this->close(); }
+MotorsSocketCANFD::~MotorsSocketCANFD() { this->close(); }
 
-void MotorsSocketCAN::open(const std::string& interface) {
+void MotorsSocketCANFD::open(const std::string& interface) {
     sockfd_ = socket(PF_CAN, SOCK_RAW, CAN_RAW);
-    if (sockfd_ == INIT_FD) {
+    if (sockfd_ == FD_INIT_FD) {
         logger_->error("Failed to create CAN socket");
         throw std::runtime_error("Failed to create CAN socket");
+    }
+
+    int enable_canfd = 1;
+    if (setsockopt(sockfd_, SOL_CAN_RAW, CAN_RAW_FD_FRAMES, &enable_canfd, sizeof(enable_canfd)) != 0) {
+        logger_->error("Failed to enable CAN-FD support");
+        this->close();
+        throw std::runtime_error("Failed to enable CAN-FD support");
     }
 
     int bufsize = 1024 * 1024;  // 1MB
@@ -73,10 +80,10 @@ void MotorsSocketCAN::open(const std::string& interface) {
 
     receiving_ = true;
     receiver_thread_ = std::thread([this]() {
-        pthread_setname_np(pthread_self(), "can_rx");
+        pthread_setname_np(pthread_self(), "canfd_rx");
         struct sched_param sp{}; sp.sched_priority = 80;
         if (pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp) != 0) {
-            logger_->error("Failed to set realtime priority for CAN RX thread");
+            logger_->error("Failed to set realtime priority for CANFD RX thread");
         }
 
         int total_cores = std::thread::hardware_concurrency();
@@ -93,46 +100,46 @@ void MotorsSocketCAN::open(const std::string& interface) {
         CPU_ZERO(&cpuset);
         CPU_SET(cpu_id, &cpuset);
         if (pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset) != 0) {
-            logger_->error("Failed to bind CAN RX thread to Core {}", cpu_id);
+            logger_->error("Failed to bind CANFD RX thread to Core {}", cpu_id);
         }
 
         fd_set descriptors;
         int maxfd = sockfd_;
         struct timeval timeout;
-        can_frame rx_frame;
+        canfd_frame rx_frame;
 
         while (receiving_) {
             FD_ZERO(&descriptors);
             FD_SET(sockfd_, &descriptors);
 
-            timeout.tv_sec = TIMEOUT_SEC;
-            timeout.tv_usec = TIMEOUT_USEC;
+            timeout.tv_sec = FD_TIMEOUT_SEC;
+            timeout.tv_usec = FD_TIMEOUT_USEC;
 
             int sel_ret = ::select(maxfd + 1, &descriptors, NULL, NULL, &timeout);
             if (sel_ret < 0) {
                 if (errno == EINTR) continue;
-                logger_->error("CAN select error: {}", strerror(errno));
+                logger_->error("CANFD select error: {}", strerror(errno));
                 break;
             }
             if (sel_ret == 1) {
                 while (true){
-                    int len = ::read(sockfd_, &rx_frame, CAN_MTU);
+                    int len = ::read(sockfd_, &rx_frame, CANFD_MTU);
                     if (len < 0) {
                         if (errno == EAGAIN || errno == EWOULDBLOCK) {
                             break; 
                         }
-                        logger_->warn("CAN read error: {}", strerror(errno));
+                        logger_->warn("CANFD read error: {}", strerror(errno));
                         break;
                     }
                     if (len == 0){
                         break;
                     }
-                    CanCbkFunc callback_to_run;
+                    CanFdCbkFunc callback_to_run;
                     {
-                        std::lock_guard<std::mutex> lock(can_callback_mutex_);
-                        CanCbkId key = key_extractor_(rx_frame);
-                        auto it = can_callback_list_.find(key);
-                        if (it != can_callback_list_.end()) {
+                        std::lock_guard<std::mutex> lock(canfd_callback_mutex_);
+                        CanFdCbkId key = key_extractor_(rx_frame);
+                        auto it = canfd_callback_list_.find(key);
+                        if (it != canfd_callback_list_.end()) {
                             callback_to_run = it->second;
                         }
                     }
@@ -145,10 +152,10 @@ void MotorsSocketCAN::open(const std::string& interface) {
     });
 
     sender_thread_ = std::thread([this]() {
-        pthread_setname_np(pthread_self(), "can_tx");
+        pthread_setname_np(pthread_self(), "canfd_tx");
         struct sched_param sp{}; sp.sched_priority = 80;
         if (pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp) != 0) {
-            logger_->error("Failed to set realtime priority for CAN TX thread");
+            logger_->error("Failed to set realtime priority for CANFD TX thread");
         }
 
         int total_cores = std::thread::hardware_concurrency();
@@ -165,10 +172,10 @@ void MotorsSocketCAN::open(const std::string& interface) {
         CPU_ZERO(&cpuset);
         CPU_SET(cpu_id, &cpuset);
         if (pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset) != 0) {
-            logger_->error("Failed to bind CAN TX thread to Core {}", cpu_id);
+            logger_->error("Failed to bind CANFD TX thread to Core {}", cpu_id);
         }
 
-        can_frame tx_frame;
+        canfd_frame tx_frame;
         int count = 0;
         while (receiving_) {
             {
@@ -177,12 +184,12 @@ void MotorsSocketCAN::open(const std::string& interface) {
                 if (!receiving_) break;
                 if (!tx_queue_.pop(tx_frame)) continue;
             }
-            while (::write(sockfd_, &tx_frame, sizeof(can_frame)) < 0 && count < MAX_RETRY_COUNT) {
+            while (::write(sockfd_, &tx_frame, sizeof(canfd_frame)) < 0 && count < FD_MAX_RETRY_COUNT) {
                 count += 1;
                 std::this_thread::sleep_for(std::chrono::microseconds(1000));  // Avoid busy-waiting
             }
-            if (count >= MAX_RETRY_COUNT) {
-                logger_->error("Failed to transmit CAN frame");
+            if (count >= FD_MAX_RETRY_COUNT) {
+                logger_->error("Failed to transmit CAN-FD frame");
             } else if (send_sleep_us_ > 0) {
                 std::this_thread::sleep_for(std::chrono::microseconds(send_sleep_us_));
             }
@@ -191,24 +198,24 @@ void MotorsSocketCAN::open(const std::string& interface) {
     });
 }
 
-void MotorsSocketCAN::close() {
+void MotorsSocketCANFD::close() {
     receiving_ = false;
     tx_cv_.notify_one();
     if (receiver_thread_.joinable()) receiver_thread_.join();
     if (sender_thread_.joinable()) sender_thread_.join();
 
-    if (sockfd_ != INIT_FD) {
+    if (sockfd_ != FD_INIT_FD) {
         if (::close(sockfd_) < 0) {
             logger_->warn("Failed to close socket {}: {}", interface_, strerror(errno));
         } else {
-            logger_->info("CAN interface {} closed successfully.", interface_);
+            logger_->info("CAN-FD interface {} closed successfully.", interface_);
         }
     }
-    sockfd_ = INIT_FD;
+    sockfd_ = FD_INIT_FD;
 }
 
-void MotorsSocketCAN::transmit(const can_frame &frame) {
-    if (sockfd_ == INIT_FD) {
+void MotorsSocketCANFD::transmit(const canfd_frame &frame) {
+    if (sockfd_ == FD_INIT_FD) {
         logger_->error("Unable to transmit: Socket not open");
         return;
     }
@@ -216,22 +223,22 @@ void MotorsSocketCAN::transmit(const can_frame &frame) {
     tx_cv_.notify_one();
 }
 
-void MotorsSocketCAN::add_can_callback(const CanCbkFunc& callback, const CanCbkId id) {
-    std::lock_guard<std::mutex> lock(can_callback_mutex_);
-    can_callback_list_[id] = callback;
+void MotorsSocketCANFD::add_canfd_callback(const CanFdCbkFunc& callback, const CanFdCbkId id) {
+    std::lock_guard<std::mutex> lock(canfd_callback_mutex_);
+    canfd_callback_list_[id] = callback;
 }
 
-void MotorsSocketCAN::remove_can_callback(CanCbkId id) {
-    std::lock_guard<std::mutex> lock(can_callback_mutex_);
-    can_callback_list_.erase(id);
+void MotorsSocketCANFD::remove_canfd_callback(CanFdCbkId id) {
+    std::lock_guard<std::mutex> lock(canfd_callback_mutex_);
+    canfd_callback_list_.erase(id);
 }
 
-void MotorsSocketCAN::clear_can_callbacks() {
-    std::lock_guard<std::mutex> lock(can_callback_mutex_);
-    can_callback_list_.clear();
+void MotorsSocketCANFD::clear_canfd_callbacks() {
+    std::lock_guard<std::mutex> lock(canfd_callback_mutex_);
+    canfd_callback_list_.clear();
 }
 
-void MotorsSocketCAN::set_can_key_extractor(CanCbkKeyExtractor extractor) {
-    std::lock_guard<std::mutex> lock(can_callback_mutex_);
+void MotorsSocketCANFD::set_canfd_key_extractor(CanFdCbkKeyExtractor extractor) {
+    std::lock_guard<std::mutex> lock(canfd_callback_mutex_);
     key_extractor_ = std::move(extractor);
 }
