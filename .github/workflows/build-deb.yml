@@ -1,14 +1,18 @@
-name: Build ARM64 Deb Package
+name: Build Roboto Motors Deb Package
 
 on:
   push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04-arm
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            os: ubuntu-22.04
+          - arch: arm64
+            os: ubuntu-22.04-arm
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -24,11 +28,15 @@ jobs:
         run: |
           chmod +x build_deb.sh
           ./build_deb.sh
+          
+          # Extract version from package.xml or debian/changelog to variable
+          VERSION=$(dpkg-parsechangelog -S Version | cut -d'-' -f1 || echo "unknown")
+          echo "PKG_VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Upload deb artifact
         uses: actions/upload-artifact@v4
         with:
-          name: roboto-motors-deb
+          name: roboto-motors-v${{ env.PKG_VERSION }}-${{ matrix.arch }}
           path: "*.deb"
 
       - name: Release
