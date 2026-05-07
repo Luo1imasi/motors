@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.12)
-project(roboto_motors)
+
+# 从 package.xml 中提取大版本号
+file(READ "package.xml" PACKAGE_XML_CONTENT)
+string(REGEX MATCH "<version>([0-9\\.]+)</version>" _ ${PACKAGE_XML_CONTENT})
+project(roboto_motors VERSION ${CMAKE_MATCH_1})
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
 if(NOT CMAKE_CROSSCOMPILING)
@@ -44,13 +48,37 @@ target_link_libraries(motors PUBLIC ${PUBLIC_DEPENDENCIES}
 install(DIRECTORY include/ DESTINATION include)
 
 install(TARGETS motors dm_motors evo_motors lro_motors motors_can motors_canfd 
+  EXPORT roboto_motors-targets
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
   RUNTIME DESTINATION bin
+  INCLUDES DESTINATION include
 )
 
-# Install our custom Config for non-ROS consumers (Deb mode)
-install(FILES cmake/roboto_motorsConfig.cmake
+install(EXPORT roboto_motors-targets
+  FILE roboto_motorsTargets.cmake
+  NAMESPACE roboto_motors::
+  DESTINATION lib/cmake/roboto_motors
+)
+
+include(CMakePackageConfigHelpers)
+
+write_basic_package_version_file(
+  "${CMAKE_CURRENT_BINARY_DIR}/roboto_motorsConfigVersion.cmake"
+  VERSION ${PROJECT_VERSION}
+  COMPATIBILITY AnyNewerVersion
+)
+
+configure_package_config_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/roboto_motorsConfig.cmake.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/roboto_motorsConfig.cmake"
+  INSTALL_DESTINATION lib/cmake/roboto_motors
+)
+
+# Install auto-generated Config for non-ROS consumers (Deb mode)
+install(FILES 
+  "${CMAKE_CURRENT_BINARY_DIR}/roboto_motorsConfig.cmake"
+  "${CMAKE_CURRENT_BINARY_DIR}/roboto_motorsConfigVersion.cmake"
   DESTINATION lib/cmake/roboto_motors
 )
 

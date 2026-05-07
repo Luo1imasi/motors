@@ -7,17 +7,13 @@ build/
 install/
 log/
 
-# Deb build artifacts
-*.deb
-roboto-motors_*/
-
 # debhelper build outputs
 obj-*/
 debian/files
 debian/debhelper-build-stamp
 debian/*.debhelper.log
 debian/*.substvars
-debian/roboto-motors/
+debian/roboto-*/
 debian/.debhelper/
 
 # source ignore
