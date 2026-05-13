@@ -413,6 +413,9 @@ void DmMotorDriver::motor_mit_cmd(float f_p, float f_v, float f_kp, float f_kd, 
 }
 
 void DmMotorDriver::set_motor_control_mode(uint8_t motor_control_mode) {
+    if (motor_control_mode_ == motor_control_mode) {
+        return;
+    }
     write_register_dm(10, motor_control_mode);
     motor_control_mode_ = motor_control_mode;
 }
