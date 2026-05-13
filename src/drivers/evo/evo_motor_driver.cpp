@@ -158,6 +158,12 @@ uint8_t EvoMotorDriver::init_motor() {
         case EVOError::EVO_OVERLOAD:
             return EVOError::EVO_OVERLOAD;
             break;
+        case EVOError::EVO_OVER_SPEED:
+            return EVOError::EVO_OVER_SPEED;
+            break;
+        case EVOError::EVO_POS_OVER_LIMIT:
+            return EVOError::EVO_POS_OVER_LIMIT;
+            break;
         case EVOError::EVO_ENCODER_ERROR:
             return EVOError::EVO_ENCODER_ERROR;
             break;
@@ -241,7 +247,18 @@ void EvoMotorDriver::canfd_rx_cbk(const canfd_frame& rx_frame) {
     pos_int = rx_frame.data[0] << 8 | rx_frame.data[1];
     spd_int = rx_frame.data[2] << 4 | (rx_frame.data[3] >> 4);
     t_int = ((rx_frame.data[3] & 0x0F) << 8) | rx_frame.data[4];
-    error_id_ = ((rx_frame.data[6] << 8) | rx_frame.data[7]) >> 1 & 0x7F;
+    uint16_t error_word = (rx_frame.data[6] << 8) | rx_frame.data[7];
+    // Map new CAN-FD spec error bits to EVOError codes (priority order)
+    if (error_word & (1 << 13))      error_id_ = EVOError::EVO_COMM_LOST;
+    else if (error_word & (1 << 12)) error_id_ = EVOError::EVO_POS_OVER_LIMIT;
+    else if (error_word & (1 << 11)) error_id_ = EVOError::EVO_UNDER_VOLTAGE;
+    else if (error_word & (1 << 10)) error_id_ = EVOError::EVO_MOS_OVER_TEMP;
+    else if (error_word & (1 << 8))  error_id_ = EVOError::EVO_OVERLOAD;
+    else if (error_word & (1 << 4))  error_id_ = EVOError::EVO_OVER_SPEED;
+    else if (error_word & (1 << 3))  error_id_ = EVOError::EVO_COIL_OVER_TEMP;
+    else if (error_word & (1 << 2))  error_id_ = EVOError::EVO_OVER_CURRENT;
+    else if (error_word & (1 << 1))  error_id_ = EVOError::EVO_OVER_VOLTAGE;
+    else                             error_id_ = EVOError::EVO_NO_ERROR;
     if (error_id_ > 0) {
         if (logger_) {
             logger_->error("can_interface: {0}\tmotor_id: {1}\terror_id: 0x{2:x}", can_interface_, motor_id_, (uint32_t)error_id_);
@@ -300,44 +317,34 @@ void EvoMotorDriver::motor_pos_cmd(float pos, float spd, bool ignore_limit) {
         set_motor_control_mode(POS);
         return;
     }
-    uint8_t *pbuf, *vbuf;
+    uint16_t p_int;
+    uint8_t v_int, pos_kp, pos_kd, vel_kp, vel_kd, vel_ki;
 
     pos -= motor_zero_offset_;
-    spd = limit(spd, -limit_param_.SpdMax, limit_param_.SpdMax);
     pos = limit(pos, -limit_param_.PosMax, limit_param_.PosMax);
+    spd = limit(spd, -limit_param_.SpdMax, limit_param_.SpdMax);
 
-    pbuf = (uint8_t*)&pos;
-    vbuf = (uint8_t*)&spd;
+    p_int = range_map(pos, -limit_param_.PosMax, limit_param_.PosMax, uint16_t(0), bitmax<uint16_t>(16));
+    v_int = range_map(spd, -limit_param_.SpdMax, limit_param_.SpdMax, 0.0f, 255.0f);
+    pos_kp = range_map(limit_param_.OKpMax * 0.1f, 0.0f, limit_param_.OKpMax, 0.0f, 255.0f);
+    pos_kd = range_map(limit_param_.OKdMax * 0.1f, 0.0f, limit_param_.OKdMax, 0.0f, 255.0f);
+    vel_kp = range_map(limit_param_.OKpMax * 0.2f, 0.0f, limit_param_.OKpMax, 0.0f, 255.0f);
+    vel_kd = 0;
+    vel_ki = 0;
 
-    if (comm_type_ == CommType::CANFD) {
-        canfd_frame tx_frame;
-        tx_frame.can_id = motor_id_;
-        tx_frame.len = 0x08;
-        tx_frame.flags = CANFD_BRS;
-
-        tx_frame.data[0] = *pbuf;
-        tx_frame.data[1] = *(pbuf + 1);
-        tx_frame.data[2] = *(pbuf + 2);
-        tx_frame.data[3] = *(pbuf + 3);
-        tx_frame.data[4] = *vbuf;
-        tx_frame.data[5] = *(vbuf + 1);
-        tx_frame.data[6] = *(vbuf + 2);
-        tx_frame.data[7] = *(vbuf + 3);
-
-        canfd_->transmit(tx_frame);
-    } else if (comm_type_ == CommType::CAN) {
+    if (comm_type_ == CommType::CAN) {
         can_frame tx_frame;
         tx_frame.can_id = motor_id_;
         tx_frame.can_dlc = 0x08;
 
-        tx_frame.data[0] = *pbuf;
-        tx_frame.data[1] = *(pbuf + 1);
-        tx_frame.data[2] = *(pbuf + 2);
-        tx_frame.data[3] = *(pbuf + 3);
-        tx_frame.data[4] = *vbuf;
-        tx_frame.data[5] = *(vbuf + 1);
-        tx_frame.data[6] = *(vbuf + 2);
-        tx_frame.data[7] = *(vbuf + 3);
+        tx_frame.data[0] = p_int >> 8;
+        tx_frame.data[1] = p_int & 0xFF;
+        tx_frame.data[2] = v_int;
+        tx_frame.data[3] = pos_kp;
+        tx_frame.data[4] = pos_kd;
+        tx_frame.data[5] = vel_kp;
+        tx_frame.data[6] = vel_kd;
+        tx_frame.data[7] = vel_ki;
 
         can_->transmit(tx_frame);
     }
@@ -351,31 +358,27 @@ void EvoMotorDriver::motor_spd_cmd(float spd) {
         set_motor_control_mode(SPD);
         return;
     }
+    uint16_t s_int, kp, kd, ki;
+
     spd = limit(spd, -limit_param_.SpdMax, limit_param_.SpdMax);
-    union32_t rv_type_convert;
-    rv_type_convert.f = spd;
+    s_int = range_map(spd, -limit_param_.SpdMax, limit_param_.SpdMax, uint16_t(0), bitmax<uint16_t>(16));
+    kp   = range_map(limit_param_.OKpMax * 0.2f, 0.0f, limit_param_.OKpMax, uint16_t(0), bitmax<uint16_t>(12));
+    kd   = 0;
+    ki   = 0;
 
-    if (comm_type_ == CommType::CANFD) {
-        canfd_frame tx_frame;
-        tx_frame.can_id = motor_id_;
-        tx_frame.len = 0x08;
-        tx_frame.flags = CANFD_BRS;
-
-        tx_frame.data[0] = rv_type_convert.buf[0];
-        tx_frame.data[1] = rv_type_convert.buf[1];
-        tx_frame.data[2] = rv_type_convert.buf[2];
-        tx_frame.data[3] = rv_type_convert.buf[3];
-
-        canfd_->transmit(tx_frame);
-    } else if (comm_type_ == CommType::CAN) {
+    if (comm_type_ == CommType::CAN) {
         can_frame tx_frame;
         tx_frame.can_id = motor_id_;
         tx_frame.can_dlc = 0x08;
 
-        tx_frame.data[0] = rv_type_convert.buf[0];
-        tx_frame.data[1] = rv_type_convert.buf[1];
-        tx_frame.data[2] = rv_type_convert.buf[2];
-        tx_frame.data[3] = rv_type_convert.buf[3];
+        tx_frame.data[0] = s_int >> 8;
+        tx_frame.data[1] = s_int & 0xFF;
+        tx_frame.data[2] = kp >> 4;
+        tx_frame.data[3] = (kp & 0x0F) << 4 | kd >> 8;
+        tx_frame.data[4] = kd & 0xFF;
+        tx_frame.data[5] = ki >> 4;
+        tx_frame.data[6] = (ki & 0x0F) << 4;
+        tx_frame.data[7] = 0xAC;
 
         can_->transmit(tx_frame);
     }
@@ -405,23 +408,7 @@ void EvoMotorDriver::motor_mit_cmd(float f_p, float f_v, float f_kp, float f_kd,
     kd = range_map(f_kd, 0.0f, limit_param_.OKdMax, uint16_t(0), bitmax<uint16_t>(12));
     t = range_map(f_t, -limit_param_.TauMax, limit_param_.TauMax, uint16_t(0), bitmax<uint16_t>(12));
 
-    if (comm_type_ == CommType::CANFD) {
-        canfd_frame tx_frame{};
-        tx_frame.can_id = motor_id_;
-        tx_frame.len = 0x08;
-        tx_frame.flags = CANFD_BRS;
-
-        tx_frame.data[0] = p >> 8;
-        tx_frame.data[1] = p & 0xFF;
-        tx_frame.data[2] = v >> 4;
-        tx_frame.data[3] = ((v & 0x0F) << 4) | (kp >> 8);
-        tx_frame.data[4] = kp & 0xFF;
-        tx_frame.data[5] = kd >> 4;
-        tx_frame.data[6] = ((kd & 0x0F) << 4) | (t >> 8);
-        tx_frame.data[7] = t & 0xFF;
-
-        canfd_->transmit(tx_frame);
-    } else if (comm_type_ == CommType::CAN) {
+    if (comm_type_ == CommType::CAN) {
         can_frame tx_frame;
         tx_frame.can_id = motor_id_;
         tx_frame.can_dlc = 0x08;
@@ -513,32 +500,37 @@ void EvoMotorDriver::motor_mit_cmd(float* f_p, float* f_v, float* f_kp, float* f
 }
 
 void EvoMotorDriver::set_motor_control_mode(uint8_t motor_control_mode) {
-    if (comm_type_ == CommType::CAN) write_register_evo(11, 0x02);
+    if (motor_control_mode_ == motor_control_mode) {
+        return;
+    }
+    if (motor_control_mode == MIT){
+        write_register_evo(11, 0x02);
+    }
+    if (motor_control_mode == POS){
+        write_register_evo(11, 0x01);
+    }
+    if (motor_control_mode == SPD){
+        write_register_evo(11, 0x03);
+    }
     motor_control_mode_ = motor_control_mode;
 }
 
 void EvoMotorDriver::set_motor_id(uint8_t old_id, uint8_t new_id) {
     if (old_id == new_id) {
-        logger_->warn("Skipping ID set: Old and New ID are identical ({})", old_id);
         return;
     }
-
     logger_->info("Changing Motor ID: {} -> {} (Interface: {})", old_id, new_id, can_interface_);
-
     // EVO Motor ID is register 36 (EVO_REG_MOTOR_ID, Int32)
     // Must send via current motor_id (old_id), writing new_id to register 36
     write_register_evo(EVO_REG_MOTOR_ID, static_cast<int32_t>(new_id));
     Timer::sleep_for(setup_sleep_time);
-    logger_->info("Set ID command sent. Verify the new ID via bus query.");
 }
 
 void EvoMotorDriver::reset_motor_id() {
     logger_->info("Resetting Motor ID to 1 (Interface: {})", can_interface_);
-
     // Reset Motor ID to 1 by writing to register 36
     write_register_evo(EVO_REG_MOTOR_ID, static_cast<int32_t>(1));
     Timer::sleep_for(setup_sleep_time);
-    logger_->info("Reset ID command sent. Verify the new ID via bus query.");
 }
 
 void EvoMotorDriver::set_motor_zero_evo() {

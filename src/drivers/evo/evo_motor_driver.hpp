@@ -18,6 +18,8 @@ enum EVOError {
     EVO_ENCODER_ERROR = 0x0B,
     EVO_OVERLOAD = 0x0F,
     EVO_COMM_LOST = 0x10,
+    EVO_OVER_SPEED = 0x0E,       // over-speed (new CAN-FD spec bit 4)
+    EVO_POS_OVER_LIMIT = 0x0D,   // position over-limit (new CAN-FD spec bit 12)
     EVO_UNKNOWN_ERROR = 0xFF
 };
 
