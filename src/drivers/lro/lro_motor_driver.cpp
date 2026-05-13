@@ -45,8 +45,6 @@ LroMotorDriver::~LroMotorDriver() {
                 bus_registry_.erase(it);
             }
         }
-    } else if (comm_type_ == CommType::ETHERCAT) {
-        spdlog::error("LRO driver does not support EtherCAT interface yet");
     }
 }
 
@@ -63,8 +61,6 @@ void LroMotorDriver::lock_motor() {
         tx_frame.data[3] = LRO_CMD_ENABLE;
         
         canfd_->transmit(tx_frame);
-    } else if (comm_type_ == CommType::ETHERCAT) {
-        throw std::runtime_error("LRO driver does not support EtherCAT interface yet");
     }
     {
         response_count_++;
@@ -84,8 +80,6 @@ void LroMotorDriver::unlock_motor() {
         tx_frame.data[3] = LRO_CMD_DISABLE;
 
         canfd_->transmit(tx_frame);
-    } else if (comm_type_ == CommType::ETHERCAT) {
-        throw std::runtime_error("LRO driver does not support EtherCAT interface yet");
     }
     {
         response_count_++;
@@ -173,7 +167,7 @@ void LroMotorDriver::canfd_rx_cbk(const canfd_frame& rx_frame) {
         range_map(spd_int, uint16_t(0), bitmax<uint16_t>(12), -limit_param_.SpdMax, limit_param_.SpdMax);
     motor_current_ = 
         range_map(t_int, uint16_t(0), bitmax<uint16_t>(12), -limit_param_.TauMax, limit_param_.TauMax);
-    mos_temperature_ = rx_frame.data[7];
+    mos_temperature_ = static_cast<float>(static_cast<int>(rx_frame.data[7]) - 25);
     motor_temperature_ = static_cast<float>(static_cast<int>(rx_frame.data[6]) - 25); // Temperature: value - 25 = actual temperature
 }
 
@@ -192,8 +186,6 @@ void LroMotorDriver::get_motor_param(uint8_t param_cmd) {
         tx_frame.data[1] = param_cmd; //// Query (mode 0x07) — request param/status
 
         canfd_->transmit(tx_frame);
-    } else if (comm_type_ == CommType::ETHERCAT) {
-        throw std::runtime_error("LRO driver does not support EtherCAT interface yet");
     }
     {
         response_count_++;
@@ -221,8 +213,8 @@ void LroMotorDriver::motor_pos_cmd(float pos, float spd, bool ignore_limit) {
 
         uint64_t packed = 0;
         packed |= (static_cast<uint64_t>(LRO_MODE_POS & 0x07)) << 61;
-        packed |= (static_cast<uint64_t>(rv_type_convert.buf[3]) << 29) | (static_cast<uint64_t>(rv_type_convert.buf[2]) << 21)
-                 | (static_cast<uint64_t>(rv_type_convert.buf[1]) << 13) | (static_cast<uint64_t>(rv_type_convert.buf[0]) << 5);
+        packed |= (static_cast<uint64_t>(rv_type_convert.buf[3]) << 53) | (static_cast<uint64_t>(rv_type_convert.buf[2]) << 45)
+                 | (static_cast<uint64_t>(rv_type_convert.buf[1]) << 37) | (static_cast<uint64_t>(rv_type_convert.buf[0]) << 29);
         packed |= (static_cast<uint64_t>(spd_val & 0x7FFF)) << 14;
         packed |= (static_cast<uint64_t>(cur_limit & 0x0FFF)) << 2;
         packed |= (static_cast<uint64_t>(ack & 0x03));
@@ -232,8 +224,6 @@ void LroMotorDriver::motor_pos_cmd(float pos, float spd, bool ignore_limit) {
         }
 
         canfd_->transmit(tx_frame);
-    } else if (comm_type_ == CommType::ETHERCAT) {
-        throw std::runtime_error("LRO driver does not support EtherCAT interface yet");
     }
     {
         response_count_++;
@@ -266,8 +256,6 @@ void LroMotorDriver::motor_spd_cmd(float spd) {
         tx_frame.data[6] = cur_limit & 0xFF;
 
         canfd_->transmit(tx_frame);
-    } else if (comm_type_ == CommType::ETHERCAT) {
-        throw std::runtime_error("LRO driver does not support EtherCAT interface yet");
     }
     {
         response_count_++;
@@ -288,7 +276,7 @@ void LroMotorDriver::motor_spd_cmd(float spd) {
 void LroMotorDriver::motor_mit_cmd(float f_p, float f_v, float f_kp, float f_kd, float f_t) {
     if (motor_control_mode_ != MIT) {
         set_motor_control_mode(MIT);
-        Timer::sleep_for(normal_sleep_time);
+        return;
     }
     uint16_t p, v, kp, kd, t;
 
@@ -329,8 +317,6 @@ void LroMotorDriver::motor_mit_cmd(float f_p, float f_v, float f_kp, float f_kd,
         tx_frame.data[7] = packed & 0xFF;
 
         canfd_->transmit(tx_frame);
-    } else if (comm_type_ == CommType::ETHERCAT) {
-        throw std::runtime_error("LRO driver does not support EtherCAT interface yet");
     }
     {
         response_count_++;
@@ -341,15 +327,9 @@ void LroMotorDriver::motor_mit_cmd(float* f_p, float* f_v, float* f_kp, float* f
     if (!f_p || !f_v || !f_kp || !f_kd || !f_t) {
         return;
     }
-    if (comm_type_ != CommType::CANFD) {
-        if (comm_type_ == CommType::ETHERCAT) {
-            throw std::runtime_error("LRO driver does not support EtherCAT interface yet");
-        }
-        throw std::runtime_error("LRO multi-motor MIT mode only supports CANFD interface");
-    }
     if (motor_control_mode_ != MIT) {
         set_motor_control_mode(MIT);
-        Timer::sleep_for(normal_sleep_time);
+        return;
     }
     canfd_frame tx_frame;
     tx_frame.can_id = 0x8080 | CAN_EFF_FLAG;
@@ -413,33 +393,10 @@ void LroMotorDriver::motor_mit_cmd(float* f_p, float* f_v, float* f_kp, float* f
 }
 
 void LroMotorDriver::set_motor_control_mode(uint8_t motor_control_mode) {
-    // 1. Parameter Validation
-    if (motor_control_mode > LRO_MODE_CUR) {
-        logger_->error("Invalid motor control mode: {} (ID: {})", motor_control_mode, motor_id_);
+    if (motor_control_mode_ == motor_control_mode) {
         return;
     }
-
-    // 2. State Logging
-    uint8_t old_mode = motor_control_mode_;
-    logger_->info("Switching motor control mode: {} -> {} (ID: {})", old_mode, motor_control_mode, motor_id_);
-
-    // 3. Special Handling: Non-MIT to MIT Transition
-    // Send a zero command to prevent jumps when entering impedance mode
-    if (motor_control_mode == LRO_MODE_MIT && old_mode != LRO_MODE_MIT) {
-        logger_->debug("Sending zero MIT command to synchronize mode (ID: {})", motor_id_);
-        
-        // Command: pos=0, spd=0, kp=0, kd=0, torque=0
-        motor_mit_cmd(0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
-        Timer::sleep_for(normal_sleep_time);
-    }
-
-    // 4. Update Internal State
     motor_control_mode_ = motor_control_mode;
-
-    // // 5. Warning for Experimental Modes
-    // if (motor_control_mode != LRO_MODE_MIT && motor_control_mode != 0x00) {
-    //     logger_->warn("Mode {} is not fully tested; MIT mode is recommended for LRO series", motor_control_mode);
-    // }
 }
 
 void LroMotorDriver::set_motor_id(uint8_t old_id, uint8_t new_id) {
@@ -448,14 +405,10 @@ void LroMotorDriver::set_motor_id(uint8_t old_id, uint8_t new_id) {
         logger_->error("Invalid ID range: old={}, new={}", old_id, new_id);
         return;
     }
-
     if (old_id == new_id) {
-        logger_->warn("Skipping ID set: Old and New ID are identical ({})", old_id);
         return;
     }
-
     logger_->info("Changing Motor ID: {} -> {} (Interface: {})", old_id, new_id, can_interface_);
-
     if (comm_type_ == CommType::CANFD) {
         canfd_frame tx_frame{};
         tx_frame.can_id = 0x7FF; // Dedicated Configuration ID
@@ -477,9 +430,6 @@ void LroMotorDriver::set_motor_id(uint8_t old_id, uint8_t new_id) {
 
         // Allow buffer time for Flash write persistence
         Timer::sleep_for(setup_sleep_time);
-        logger_->info("Set ID command sent. Verify the new ID via bus query.");
-    } else if (comm_type_ == CommType::ETHERCAT) {
-        throw std::runtime_error("LRO driver does not support EtherCAT interface yet");
     }
 }
 
@@ -499,8 +449,6 @@ void LroMotorDriver::reset_motor_id() {
         tx_frame.data[5] = 0x7F;
 
         canfd_->transmit(tx_frame);
-    } else if (comm_type_ == CommType::ETHERCAT) {
-        throw std::runtime_error("LRO driver does not support EtherCAT interface yet");
     }
     {
         response_count_++;
@@ -520,8 +468,6 @@ void LroMotorDriver::set_motor_zero_lro() {
         tx_frame.data[3] = LRO_CMD_SET_ZERO;
         
         canfd_->transmit(tx_frame);
-    } else if (comm_type_ == CommType::ETHERCAT) {
-        throw std::runtime_error("LRO driver does not support EtherCAT interface yet");
     }
     {
         response_count_++;
@@ -564,64 +510,20 @@ void LroMotorDriver::clear_motor_error_lro() {
         {
             response_count_++;
         }
-    } else if (comm_type_ == CommType::ETHERCAT) {
-        throw std::runtime_error("LRO driver does not support EtherCAT interface yet");
     }
 }
 
 void LroMotorDriver::write_register_lro(uint8_t rid, float value) {
-    uint8_t* vbuf = reinterpret_cast<uint8_t*>(&value);
-
-    if (comm_type_ == CommType::CANFD) {
-        canfd_frame tx_frame{};
-        tx_frame.can_id = motor_id_;
-        tx_frame.len = 0x06;
-        tx_frame.flags = CANFD_BRS;
-
-        tx_frame.data[0] = (LRO_MODE_CONFIG << 5);
-        tx_frame.data[1] = rid;
-        tx_frame.data[2] = vbuf[0];
-        tx_frame.data[3] = vbuf[1];
-        tx_frame.data[4] = vbuf[2];
-        tx_frame.data[5] = vbuf[3];
-
-        canfd_->transmit(tx_frame);
-    } else if (comm_type_ == CommType::ETHERCAT) {
-        throw std::runtime_error("LRO driver does not support EtherCAT interface yet");
-    }
-    {
-        response_count_++;
-    }
+    return;
 }
 
 void LroMotorDriver::write_register_lro(uint8_t index, int32_t value) {
-    if (comm_type_ == CommType::CANFD) {
-        canfd_frame tx_frame{};
-        tx_frame.can_id = motor_id_;
-        tx_frame.len = 0x06;
-        tx_frame.flags = CANFD_BRS;
-
-        tx_frame.data[0] = (LRO_MODE_CONFIG << 5);
-        tx_frame.data[1] = index;
-        tx_frame.data[2] = (value >> 24) & 0xFF;
-        tx_frame.data[3] = (value >> 16) & 0xFF;
-        tx_frame.data[4] = (value >> 8) & 0xFF;
-        tx_frame.data[5] = value & 0xFF;
-
-        canfd_->transmit(tx_frame);
-    } else if (comm_type_ == CommType::ETHERCAT) {
-        throw std::runtime_error("LRO driver does not support EtherCAT interface yet");
-    }
-    {
-        response_count_++;
-    }
+    return;
 }
 
 void LroMotorDriver::save_register_lro() {
     // LRO protocol has no dedicated "save to flash" command.
-    // Parameters are saved automatically on config write (section 3.2).
-    // The previous implementation incorrectly sent 0x04 (set motor ID).
-    logger_->warn("save_register_lro: LRO protocol has no explicit save command, parameters are auto-saved on write");
+    return;
 }
 
 void LroMotorDriver::refresh_motor_status() {
