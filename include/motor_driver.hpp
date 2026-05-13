@@ -298,13 +298,13 @@ class MotorDriver {
 
    protected:
     std::shared_ptr<spdlog::logger> logger_;
-    uint16_t motor_id_;
+    uint16_t motor_id_{0};
 
-    uint8_t motor_control_mode_;  // 0:none 1:pos 2:spd 3:mit
+    uint8_t motor_control_mode_{0};  // 0:none 1:mit 2:pos 3:spd
 
     std::atomic<uint8_t> error_id_{0};
 
-    double motor_zero_offset_;
+    double motor_zero_offset_{0.f};
     std::atomic<float> motor_pos_{0.f};
     std::atomic<float> motor_spd_{0.f};
     std::atomic<float> motor_current_{0.f};
