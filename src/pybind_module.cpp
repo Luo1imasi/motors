@@ -37,6 +37,18 @@ PYBIND11_MODULE(motors_py, m) {
         .def("motor_pos_cmd", &MotorDriver::motor_pos_cmd, py::arg("pos"), py::arg("spd"), py::arg("ignore_limit") = false)
         .def("motor_spd_cmd", &MotorDriver::motor_spd_cmd)
         .def("motor_mit_cmd", static_cast<void (MotorDriver::*)(float, float, float, float, float)>(&MotorDriver::motor_mit_cmd))
+        .def("motors_mit_cmd", [](MotorDriver& self, std::vector<float> f_p, std::vector<float> f_v,
+                                        std::vector<float> f_kp, std::vector<float> f_kd, std::vector<float> f_t) {
+            float p_arr[8] = {}, v_arr[8] = {}, kp_arr[8] = {}, kd_arr[8] = {}, t_arr[8] = {};
+            for (size_t i = 0; i < 8 && i < f_p.size(); i++) {
+                p_arr[i] = f_p[i];
+                v_arr[i] = i < f_v.size() ? f_v[i] : 0.0f;
+                kp_arr[i] = i < f_kp.size() ? f_kp[i] : 0.0f;
+                kd_arr[i] = i < f_kd.size() ? f_kd[i] : 0.0f;
+                t_arr[i] = i < f_t.size() ? f_t[i] : 0.0f;
+            }
+            self.motor_mit_cmd(p_arr, v_arr, kp_arr, kd_arr, t_arr);
+        }, py::arg("f_p"), py::arg("f_v"), py::arg("f_kp"), py::arg("f_kd"), py::arg("f_t"))
         .def("set_motor_control_mode", &MotorDriver::set_motor_control_mode)
         .def("get_response_count", &MotorDriver::get_response_count)
         .def("refresh_motor_status", &MotorDriver::refresh_motor_status)
