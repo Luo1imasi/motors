@@ -11,7 +11,8 @@ jobs:
           - arch: amd64
             os: ubuntu-22.04
           - arch: arm64
-            os: ubuntu-22.04-arm
+            # os: ubuntu-22.04-arm
+            os: [self-hosted, linux, ARM64]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout code
