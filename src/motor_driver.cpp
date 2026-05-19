@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0
+// Copyright (C) 2025-2026 Luo1imasi
+
 #include "motor_driver.hpp"
 
 #include "dm_motor_driver.hpp"

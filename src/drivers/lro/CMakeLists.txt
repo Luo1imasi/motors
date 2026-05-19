@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0
+# Copyright (C) 2026 wentywenty
 AUX_SOURCE_DIRECTORY(. SOURCE_LIST_LRO_MOTORS)
 add_library(lro_motors
         STATIC

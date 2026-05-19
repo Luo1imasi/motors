@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0
+// Copyright (C) 2026 Luo1imasi
+
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include "motor_driver.hpp"

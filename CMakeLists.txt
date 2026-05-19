@@ -1,6 +1,7 @@
+# SPDX-License-Identifier: GPL-3.0
+# Copyright (C) 2025-2026 Luo1imasi
 cmake_minimum_required(VERSION 3.12)
 
-# 从 package.xml 中提取大版本号
 file(READ "package.xml" PACKAGE_XML_CONTENT)
 string(REGEX MATCH "<version>([0-9\\.]+)</version>" _ ${PACKAGE_XML_CONTENT})
 project(roboto_motors VERSION ${CMAKE_MATCH_1})

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0
+// Copyright (C) 2026 wentywenty
+// Copyright (C) 2026 Luo1imasi
+
 #include "lro_motor_driver.hpp"
 
 LRO_Limit_Param lro_limit_param[LRO_Num_Of_Motor] = {

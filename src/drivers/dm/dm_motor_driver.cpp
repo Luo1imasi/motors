@@ -1,4 +1,7 @@
-// DmMotorDriver.cpp
+// SPDX-License-Identifier: GPL-3.0
+// Copyright (C) 2025-2026 Luo1imasi
+// Copyright (C) 2026 wentywenty
+
 #include "dm_motor_driver.hpp"
 
 DM_Limit_Param dm_limit_param[DM_Num_Of_Motor] = {

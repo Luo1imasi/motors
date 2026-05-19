@@ -5,7 +5,7 @@
   <version>2.1.2</version>
   <description>roboto motors package</description>
   <maintainer email="ZhihaoLiu_hit@163.com">RoboParty</maintainer>
-  <license>Apache-2.0</license>
+  <license>GPL-3.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 

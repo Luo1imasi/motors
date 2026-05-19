@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0
+# Copyright (C) 2025-2026 Luo1imasi
+# Copyright (C) 2026 wentywenty
 AUX_SOURCE_DIRECTORY(. SOURCE_LIST_DM_MOTORS)
 add_library(dm_motors
         STATIC
