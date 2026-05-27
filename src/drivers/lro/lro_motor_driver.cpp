@@ -2,9 +2,9 @@
 
 LRO_Limit_Param lro_limit_param[LRO_Num_Of_Motor] = {
     {12.5, 45.0, 40.0, 500.0, 5.0},  // LRO_PJ2_55_5550
-    {12.5, 45.0, 40.0, 500.0, 5.0},  // LRO_PJ3_60_6562
+    {12.5, 20.0, 28.5, 500.0, 50.0},  // LRO_PJ3_60_6562
     {12.5, 30.0, 60.0, 500.0, 5.0},  // LRO_PJ3_75_8462
-    {12.5, 25.0, 80.0, 500.0, 5.0}   // LRO_PJ3_97_10062
+    {12.5, 13.5, 140.0, 500.0, 50.0}   // LRO_PJ3_97_10062
 };
 
 LroMotorDriver::LroMotorDriver(uint16_t motor_id, const std::string& interface_type, const std::string& can_interface, 
