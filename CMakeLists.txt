@@ -42,13 +42,13 @@ target_include_directories(motors
   $<INSTALL_INTERFACE:include>
 )
 target_link_libraries(motors PUBLIC ${PUBLIC_DEPENDENCIES} 
-  dm_motors evo_motors lro_motors
+  dm_motors evo_motors lro_motors xyn_motors
   motors_can motors_canfd
 )
 
 install(DIRECTORY include/ DESTINATION include)
 
-install(TARGETS motors dm_motors evo_motors lro_motors motors_can motors_canfd 
+install(TARGETS motors dm_motors evo_motors lro_motors xyn_motors motors_can motors_canfd 
   EXPORT roboto_motors-targets
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
@@ -105,7 +105,7 @@ install(TARGETS motors_py
 )
 
 if(ament_cmake_FOUND)
-    ament_export_libraries(motors dm_motors evo_motors lro_motors motors_can motors_canfd)
+    ament_export_libraries(motors dm_motors evo_motors lro_motors xyn_motors motors_can motors_canfd)
     ament_export_include_directories(include)
     ament_package()
 endif()

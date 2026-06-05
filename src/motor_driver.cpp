@@ -6,7 +6,7 @@
 #include "dm_motor_driver.hpp"
 #include "evo_motor_driver.hpp"
 #include "lro_motor_driver.hpp"
-// #include "xyn_motor_driver.hpp"
+#include "xyn_motor_driver.hpp"
 
 MotorDriver::MotorDriver() {
     std::vector<spdlog::sink_ptr> sinks;
@@ -24,9 +24,9 @@ std::shared_ptr<MotorDriver> MotorDriver::create_motor(uint16_t motor_id, const 
     } else if (motor_type == "LRO") {
     return std::make_shared<LroMotorDriver>(motor_id, interface_type, interface,
                                             static_cast<LRO_Motor_Model>(motor_model), motor_zero_offset);
-    // } else if (motor_type == "XYN") {
-    //     return std::make_shared<XynMotorDriver>(motor_id, interface_type, interface,
-    //                                             static_cast<XYN_Motor_Model>(motor_model), motor_zero_offset);
+    } else if (motor_type == "XYN") {
+        return std::make_shared<XynMotorDriver>(motor_id, interface_type, interface,
+                                                static_cast<XYN_Motor_Model>(motor_model), motor_zero_offset);
     } else {
         throw std::runtime_error("Motor type not supported");
     }

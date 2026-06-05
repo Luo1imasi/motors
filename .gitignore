@@ -20,4 +20,3 @@ debian/.debhelper/
 test/
 src/protocol/ethercanfd
 src/protocol/ethercat
-src/drivers/xyn

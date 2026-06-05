@@ -203,9 +203,9 @@ void MotorsSocketCAN::close() {
 
     if (sockfd_ != INIT_FD) {
         if (::close(sockfd_) < 0) {
-            logger_->warn("Failed to close socket {}: {}", interface_, strerror(errno));
+            if (logger_) logger_->warn("Failed to close socket {}: {}", interface_, strerror(errno));
         } else {
-            logger_->info("CAN interface {} closed successfully.", interface_);
+            if (logger_) logger_->info("CAN interface {} closed successfully.", interface_);
         }
     }
     sockfd_ = INIT_FD;
