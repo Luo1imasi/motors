@@ -44,6 +44,7 @@ enum LROSetupCmd : uint8_t {
     LRO_CMD_RESET_ID   = 0x05,  // Reset ID to 0x01
     LRO_CMD_ENABLE     = 0x06,  // Enable motor
     LRO_CMD_DISABLE    = 0x07,  // Disable motor
+    LRO_CMD_CLEAR_ERROR = 0x08, // Clear recoverable alarms
     LRO_CMD_QUERY_MODE = 0x81,  // Query communication mode
     LRO_CMD_QUERY_ID   = 0x82,  // Query motor ID
 };

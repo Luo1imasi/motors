@@ -1,10 +1,10 @@
 #include "lro_motor_driver.hpp"
 
 LRO_Limit_Param lro_limit_param[LRO_Num_Of_Motor] = {
-    {12.5, 45.0, 40.0, 500.0, 5.0},  // LRO_PJ2_55_5550
-    {12.5, 20.0, 28.5, 500.0, 50.0},  // LRO_PJ3_60_6562
-    {12.5, 30.0, 60.0, 500.0, 5.0},  // LRO_PJ3_75_8462
-    {12.5, 13.5, 140.0, 500.0, 50.0}   // LRO_PJ3_97_10062
+    {12.5, 21.0, 36.0, 500.0, 50.0},  // LRO_PJ2_55_5550
+    {12.5, 21.89, 35.3, 500.0, 50.0},  // LRO_PJ3_60_6562
+    {12.5, 16.13, 56.5, 500.0, 50.0},  // LRO_PJ3_75_8462
+    {12.5, 14.24, 141.7, 500.0, 50.0}   // LRO_PJ3_97_10062
 };
 
 LroMotorDriver::LroMotorDriver(uint16_t motor_id, const std::string& interface_type, const std::string& can_interface, 
@@ -477,39 +477,18 @@ void LroMotorDriver::set_motor_zero_lro() {
 
 void LroMotorDriver::clear_motor_error_lro() {
     if (comm_type_ == CommType::CANFD) {
-        {
-            canfd_frame tx_frame{};
-            tx_frame.can_id = 0x7FF;
-            tx_frame.len = 0x04;
-            tx_frame.flags = CANFD_BRS;
+        canfd_frame tx_frame{};
+        tx_frame.can_id = 0x7FF;
+        tx_frame.len = 0x04;
+        tx_frame.flags = CANFD_BRS;
 
-            tx_frame.data[0] = (motor_id_ >> 8) & 0xFF;
-            tx_frame.data[1] = motor_id_ & 0xFF;
-            tx_frame.data[2] = 0x00;
-            tx_frame.data[3] = LRO_CMD_DISABLE;
+        tx_frame.data[0] = (motor_id_ >> 8) & 0xFF;
+        tx_frame.data[1] = motor_id_ & 0xFF;
+        tx_frame.data[2] = 0x00;
+        tx_frame.data[3] = LRO_CMD_CLEAR_ERROR;
 
-            canfd_->transmit(tx_frame);
-        }
-        {
-            response_count_++;
-        }
-        Timer::sleep_for(normal_sleep_time);
-        {
-            canfd_frame tx_frame{};
-            tx_frame.can_id = 0x7FF;
-            tx_frame.len = 0x04;
-            tx_frame.flags = CANFD_BRS;
-
-            tx_frame.data[0] = (motor_id_ >> 8) & 0xFF;
-            tx_frame.data[1] = motor_id_ & 0xFF;
-            tx_frame.data[2] = 0x00;
-            tx_frame.data[3] = LRO_CMD_ENABLE;
-
-            canfd_->transmit(tx_frame);
-        }
-        {
-            response_count_++;
-        }
+        canfd_->transmit(tx_frame);
+        response_count_++;
     }
 }
 
