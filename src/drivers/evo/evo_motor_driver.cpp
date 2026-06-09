@@ -6,6 +6,26 @@ EVO_Limit_Param evo_limit_param[EVO_Num_Of_Motor] = {
     {12.5, 10.0, 50.0, 250.0, 50.0},    // EVO811832
 };
 
+namespace {
+
+uint8_t decode_evo_canfd_error(uint8_t byte6, uint8_t byte7) {
+    // The CAN-FD feedback table states Byte6 is the high byte and Byte7 is the low byte.
+    // get_error_id() exposes the closest matching Motorevo V3.5 8-bit fault code.
+    const uint16_t error_word = (static_cast<uint16_t>(byte6) << 8) | byte7;
+    if (error_word & (1u << 13)) return EVOError::EVO_CAN_COMM_LOST;
+    if (error_word & (1u << 12)) return EVOError::EVO_POSITION_OVER_LIMIT;
+    if (error_word & (1u << 11)) return EVOError::EVO_UNDER_VOLTAGE;
+    if (error_word & (1u << 10)) return EVOError::EVO_PCB_OVER_TEMP;
+    if (error_word & (1u << 8))  return EVOError::EVO_STALL_PROTECTION;
+    if (error_word & (1u << 4))  return EVOError::EVO_OVER_SPEED;
+    if (error_word & (1u << 3))  return EVOError::EVO_COIL_OVER_TEMP;
+    if (error_word & (1u << 2))  return EVOError::EVO_PHASE_A_OVER_CURRENT;
+    if (error_word & (1u << 1))  return EVOError::EVO_OVER_VOLTAGE;
+    return EVOError::EVO_NO_ERROR;
+}
+
+}
+
 EvoMotorDriver::EvoMotorDriver(uint16_t motor_id, const std::string& interface_type, const std::string& can_interface,
                                EVO_Motor_Model motor_model, double motor_zero_offset)
     : MotorDriver(), motor_model_(motor_model) {
@@ -136,41 +156,7 @@ uint8_t EvoMotorDriver::init_motor() {
     Timer::sleep_for(normal_sleep_time);
     EvoMotorDriver::refresh_motor_status();
     Timer::sleep_for(normal_sleep_time);
-    switch (error_id_) {
-        case EVOError::EVO_OVER_VOLTAGE:
-            return EVOError::EVO_OVER_VOLTAGE;
-            break;
-        case EVOError::EVO_UNDER_VOLTAGE:
-            return EVOError::EVO_UNDER_VOLTAGE;
-            break;
-        case EVOError::EVO_OVER_CURRENT:
-            return EVOError::EVO_OVER_CURRENT;
-            break;
-        case EVOError::EVO_MOS_OVER_TEMP:
-            return EVOError::EVO_MOS_OVER_TEMP;
-            break;
-        case EVOError::EVO_COIL_OVER_TEMP:
-            return EVOError::EVO_COIL_OVER_TEMP;
-            break;
-        case EVOError::EVO_COMM_LOST:
-            return EVOError::EVO_COMM_LOST;
-            break;
-        case EVOError::EVO_OVERLOAD:
-            return EVOError::EVO_OVERLOAD;
-            break;
-        case EVOError::EVO_OVER_SPEED:
-            return EVOError::EVO_OVER_SPEED;
-            break;
-        case EVOError::EVO_POS_OVER_LIMIT:
-            return EVOError::EVO_POS_OVER_LIMIT;
-            break;
-        case EVOError::EVO_ENCODER_ERROR:
-            return EVOError::EVO_ENCODER_ERROR;
-            break;
-        default:
-            return error_id_;
-    }
-    return error_id_;
+    return error_id_.load();
 }
 
 void EvoMotorDriver::deinit_motor() {
@@ -232,33 +218,13 @@ void EvoMotorDriver::canfd_rx_cbk(const canfd_frame& rx_frame) {
     }
     if (rx_frame.len < 8) return;
 
-    if (!(rx_frame.flags & CANFD_FDF)) {
-        can_frame frame{};
-        frame.can_id = rx_frame.can_id;
-        frame.can_dlc = rx_frame.len;
-        memcpy(frame.data, rx_frame.data, 8);
-        can_rx_cbk(frame);
-        return;
-    }
-
     uint16_t pos_int = 0;
     uint16_t spd_int = 0;
     uint16_t t_int = 0;
     pos_int = rx_frame.data[0] << 8 | rx_frame.data[1];
     spd_int = rx_frame.data[2] << 4 | (rx_frame.data[3] >> 4);
     t_int = ((rx_frame.data[3] & 0x0F) << 8) | rx_frame.data[4];
-    uint16_t error_word = (rx_frame.data[6] << 8) | rx_frame.data[7];
-    // Map new CAN-FD spec error bits to EVOError codes (priority order)
-    if (error_word & (1 << 13))      error_id_ = EVOError::EVO_COMM_LOST;
-    else if (error_word & (1 << 12)) error_id_ = EVOError::EVO_POS_OVER_LIMIT;
-    else if (error_word & (1 << 11)) error_id_ = EVOError::EVO_UNDER_VOLTAGE;
-    else if (error_word & (1 << 10)) error_id_ = EVOError::EVO_MOS_OVER_TEMP;
-    else if (error_word & (1 << 8))  error_id_ = EVOError::EVO_OVERLOAD;
-    else if (error_word & (1 << 4))  error_id_ = EVOError::EVO_OVER_SPEED;
-    else if (error_word & (1 << 3))  error_id_ = EVOError::EVO_COIL_OVER_TEMP;
-    else if (error_word & (1 << 2))  error_id_ = EVOError::EVO_OVER_CURRENT;
-    else if (error_word & (1 << 1))  error_id_ = EVOError::EVO_OVER_VOLTAGE;
-    else                             error_id_ = EVOError::EVO_NO_ERROR;
+    error_id_ = decode_evo_canfd_error(rx_frame.data[6], rx_frame.data[7]);
     if (error_id_ > 0) {
         if (logger_) {
             logger_->error("can_interface: {0}\tmotor_id: {1}\terror_id: 0x{2:x}", can_interface_, motor_id_, (uint32_t)error_id_);
@@ -585,7 +551,7 @@ void EvoMotorDriver::clear_motor_error_evo() {
         tx_frame.data[4] = 0xFF;
         tx_frame.data[5] = 0xFF;
         tx_frame.data[6] = 0xFF;
-        tx_frame.data[7] = EVO_CMD_DISABLE;
+        tx_frame.data[7] = EVO_CMD_CLEAR_ERROR;
 
         canfd_->transmit(tx_frame);
     } else if (comm_type_ == CommType::CAN) {

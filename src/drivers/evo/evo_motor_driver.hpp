@@ -12,14 +12,38 @@ enum EVOError {
     EVO_NO_ERROR = 0x00,
     EVO_OVER_VOLTAGE = 0x01,
     EVO_UNDER_VOLTAGE = 0x02,
-    EVO_OVER_CURRENT = 0x03,
-    EVO_MOS_OVER_TEMP = 0x09,
+    EVO_ELECTRIC_ANGLE_ERROR = 0x03,
+    EVO_DRV_ERROR = 0x04,
+    EVO_BUS_OVER_CURRENT = 0x05,
+    EVO_PHASE_A_OVER_CURRENT = 0x06,
+    EVO_PHASE_B_OVER_CURRENT = 0x07,
+    EVO_PHASE_C_OVER_CURRENT = 0x08,
+    EVO_PCB_OVER_TEMP = 0x09,
     EVO_COIL_OVER_TEMP = 0x0A,
     EVO_ENCODER_ERROR = 0x0B,
-    EVO_OVERLOAD = 0x0F,
-    EVO_COMM_LOST = 0x10,
-    EVO_OVER_SPEED = 0x0E,       // over-speed (new CAN-FD spec bit 4)
-    EVO_POS_OVER_LIMIT = 0x0D,   // position over-limit (new CAN-FD spec bit 12)
+    EVO_CURRENT_SENSOR_ERROR = 0x0C,
+    EVO_POSITION_OVER_LIMIT = 0x0D,
+    EVO_OVER_SPEED = 0x0E,
+    EVO_STALL_PROTECTION = 0x0F,
+    EVO_CAN_COMM_LOST = 0x10,
+
+    EVO_ENCODER_FRAME_HEAD_CHECK_ERROR = 0x81,
+    EVO_ENCODER_MULTI_TURN_ERROR = 0x82,
+    EVO_ENCODER_MULTI_TURN_INTERFACE_ERROR = 0x83,
+    EVO_ENCODER_EXTERNAL_INPUT_ERROR = 0x84,
+    EVO_ENCODER_READ_ERROR = 0x85,
+    EVO_ENCODER_ERR_OFFS = 0x86,
+    EVO_ENCODER_ERR_CFG = 0x87,
+    EVO_ILLEGAL_FIRMWARE = 0x88,
+    EVO_GATE_DRIVER_INIT_ERROR = 0x89,
+
+    // Compatibility aliases for older code using the previous enum names.
+    EVO_OVER_CURRENT = EVO_PHASE_A_OVER_CURRENT,
+    EVO_MOS_OVER_TEMP = EVO_PCB_OVER_TEMP,
+    EVO_OVERLOAD = EVO_STALL_PROTECTION,
+    EVO_COMM_LOST = EVO_CAN_COMM_LOST,
+    EVO_POS_OVER_LIMIT = EVO_POSITION_OVER_LIMIT,
+
     EVO_UNKNOWN_ERROR = 0xFF
 };
 
@@ -75,6 +99,7 @@ enum EVO_REG : uint8_t {
 };
 
 enum EVO_CMD {
+    EVO_CMD_CLEAR_ERROR = 0xFB, ///< Clear recoverable errors (CAN-FD module protocol)
     EVO_CMD_ENABLE = 0xFC,      ///< Enable motor mode and reset motor state
     EVO_CMD_DISABLE = 0xFD,      ///< Reset motor and clear errors
     EVO_CMD_SET_ZERO = 0xFE,        ///< Set current position as zero point
