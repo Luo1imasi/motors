@@ -1,0 +1,15 @@
+roboto-motors (2.1.3-1) stable; urgency=medium
+
+  * add lic
+
+ -- wentywenty <2321901849@qq.com>  Tue, 19 May 2026 12:18:33 +0800
+
+roboto-motors (2.1.2-1) stable; urgency=medium
+
+  * Update cmake export targets
+
+ -- wentywenty <2321901849@qq.com>  Thu, 07 May 2026 18:25:00 +0800
+
+roboto-motors (2.1.0-1) stable; urgency=low
+
+  * Initial release or bump to 2.1.0

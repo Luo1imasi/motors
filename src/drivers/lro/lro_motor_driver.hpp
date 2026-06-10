@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0
+// Copyright (C) 2026 wentywenty
+// Copyright (C) 2026 Luo1imasi
+
 #pragma once
 
 #include <atomic>

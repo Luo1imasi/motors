@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0
+// Copyright (C) 2025-2026 Luo1imasi
+// Copyright (C) 2025-2026 wentywenty
+
 #include "evo_motor_driver.hpp"
 
 EVO_Limit_Param evo_limit_param[EVO_Num_Of_Motor] = {

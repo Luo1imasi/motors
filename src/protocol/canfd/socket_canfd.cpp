@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0
+// Copyright (C) 2026 wentywenty
+// Copyright (C) 2026 Luo1imasi
+
 /**
  * @file
  * This file implements functions to receive
@@ -206,9 +210,9 @@ void MotorsSocketCANFD::close() {
 
     if (sockfd_ != FD_INIT_FD) {
         if (::close(sockfd_) < 0) {
-            logger_->warn("Failed to close socket {}: {}", interface_, strerror(errno));
+            if (logger_) logger_->warn("Failed to close socket {}: {}", interface_, strerror(errno));
         } else {
-            logger_->info("CAN-FD interface {} closed successfully.", interface_);
+            if (logger_) logger_->info("CAN-FD interface {} closed successfully.", interface_);
         }
     }
     sockfd_ = FD_INIT_FD;

@@ -1,19 +1,22 @@
 #environment
-.vscode
+.vscode/
+.idea/
 
-# Deb build artifacts
-*.deb
-roboto-motors_*/
-bin
-build
-lib
-/install
-temp
-cmake-build-debug
-.idea
-log
+# ros2
+build/
+install/
+log/
+
+# debhelper build outputs
+obj-*/
+debian/files
+debian/debhelper-build-stamp
+debian/*.debhelper.log
+debian/*.substvars
+debian/roboto-*/
+debian/.debhelper/
+
+# source ignore
 test/
 src/protocol/ethercanfd
 src/protocol/ethercat
-src/protocol/group_ethercat
-src/drivers/xyn
