@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: GPL-3.0
+# Copyright (C) 2026 wentywenty
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(fmt)
+find_dependency(spdlog)
+find_dependency(Eigen3)
+find_dependency(Boost COMPONENTS system)
+
+include("${CMAKE_CURRENT_LIST_DIR}/roboparty_motorsTargets.cmake")
+
+if(NOT TARGET roboparty_motors::roboparty_motors)
+    add_library(roboparty_motors::roboparty_motors INTERFACE IMPORTED)
+    target_link_libraries(roboparty_motors::roboparty_motors INTERFACE 
+        roboparty_motors::motors
+        roboparty_motors::dm_motors
+        roboparty_motors::evo_motors
+        roboparty_motors::lro_motors
+        roboparty_motors::xyn_motors
+        roboparty_motors::motors_can
+        roboparty_motors::motors_canfd
+    )
+endif()
+
+check_required_components(roboparty_motors)

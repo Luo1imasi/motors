@@ -13,7 +13,7 @@ debian/files
 debian/debhelper-build-stamp
 debian/*.debhelper.log
 debian/*.substvars
-debian/roboto-*/
+debian/roboparty-*/
 debian/.debhelper/
 
 # source ignore

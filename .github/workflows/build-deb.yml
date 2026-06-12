@@ -1,4 +1,4 @@
-name: Build Roboto Motors Deb Package
+name: Build RoboParty Motors Deb Package
 
 on:
   push:
@@ -37,7 +37,7 @@ jobs:
       - name: Upload deb artifact
         uses: actions/upload-artifact@v4
         with:
-          name: roboto-motors-v${{ env.PKG_VERSION }}-${{ matrix.arch }}
+          name: roboparty-motors-v${{ env.PKG_VERSION }}-${{ matrix.arch }}
           path: "*.deb"
 
       - name: Upload to GitHub Release

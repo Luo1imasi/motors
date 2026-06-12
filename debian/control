@@ -1,4 +1,4 @@
-Source: roboto-motors
+Source: roboparty-motors
 Section: libs
 Priority: optional
 Maintainer: RoboParty <2321901849@qq.com>
@@ -6,9 +6,9 @@ Build-Depends: debhelper-compat (= 12), cmake, pkg-config,
                libspdlog-dev, libfmt-dev, libboost-system-dev,
                libeigen3-dev, pybind11-dev, python3-dev
 
-Package: roboto-motors
+Package: roboparty-motors
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, roboto-base (>= 1.0.0)
+Depends: ${shlibs:Depends}, ${misc:Depends}, roboparty-base (>= 1.0.0)
 Description: RoboParty motor driver
  Motor driver with DM, EVO, Xynova and LeadRobot motor support (CAN protocol).
  Provides static libraries, headers and Python bindings.
