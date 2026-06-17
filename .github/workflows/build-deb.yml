@@ -1,4 +1,4 @@
-name: Build Roboto Motors Deb Package
+name: Build RoboParty Motors Deb Package
 
 on:
   push:
@@ -12,11 +12,26 @@ jobs:
             os: ubuntu-22.04
           - arch: arm64
             # os: ubuntu-22.04-arm
-            os: [self-hosted, linux, ARM64]
+            os: [self-hosted, rk3588]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Version check (package.xml vs changelog)
+        run: |
+          PKG_XML_VERSION=$(grep -oP '<version>\K[^<]+' package.xml)
+          CHANGELOG_VERSION=$(head -1 debian/changelog | grep -oP '\((.*?)\)' | tr -d '()' | cut -d'-' -f1)
+
+          echo "package.xml version: $PKG_XML_VERSION"
+          echo "changelog version:  $CHANGELOG_VERSION"
+
+          if [ "$PKG_XML_VERSION" != "$CHANGELOG_VERSION" ]; then
+            echo "::error::Version mismatch! package.xml=$PKG_XML_VERSION, changelog=$CHANGELOG_VERSION"
+            exit 1
+          fi
+
+          echo "✅ Version check passed: $PKG_XML_VERSION"
 
       - name: Install build dependencies
         run: |
@@ -37,7 +52,7 @@ jobs:
       - name: Upload deb artifact
         uses: actions/upload-artifact@v4
         with:
-          name: roboto-motors-v${{ env.PKG_VERSION }}-${{ matrix.arch }}
+          name: roboparty-motors-v${{ env.PKG_VERSION }}-${{ matrix.arch }}
           path: "*.deb"
 
       - name: Upload to GitHub Release

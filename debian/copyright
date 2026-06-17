@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: roboto-motors
-Source: https://github.com/wentywenty/roboto_motors
+Upstream-Name: roboparty-motors
+Source: https://github.com/wentywenty/roboparty_motors
 
 Files: *
 Copyright: 2025-2026 Luo1imasi
