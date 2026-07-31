@@ -9,6 +9,10 @@
  */
 
 #include "socket_can.hpp"
+
+#include <cerrno>
+#include <cctype>
+
 #include <spdlog/sinks/stdout_color_sinks.h>
 
 // MotorsCAN static members
@@ -78,20 +82,20 @@ void MotorsSocketCAN::open(const std::string& interface) {
     receiving_ = true;
     receiver_thread_ = std::thread([this]() {
         pthread_setname_np(pthread_self(), "can_rx");
-        struct sched_param sp{}; sp.sched_priority = 80;
+        struct sched_param sp{}; sp.sched_priority = 48;
         if (pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp) != 0) {
             logger_->error("Failed to set realtime priority for CAN RX thread");
         }
 
         int total_cores = std::thread::hardware_concurrency();
         if (total_cores == 0) total_cores = 4; // Fallback
-        int cpu_id = total_cores - 1;
+        const int little_cores = total_cores > 1 ? total_cores / 2 : 1;
+        int cpu_id = 0;
 
         char last_char = interface_.back();
         if (isdigit(last_char)) {
             int port_num = last_char - '0';
-            cpu_id = total_cores - 1 - port_num;
-            if (cpu_id < 0) cpu_id = 0; 
+            cpu_id = port_num % little_cores;
         }
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
@@ -150,20 +154,20 @@ void MotorsSocketCAN::open(const std::string& interface) {
 
     sender_thread_ = std::thread([this]() {
         pthread_setname_np(pthread_self(), "can_tx");
-        struct sched_param sp{}; sp.sched_priority = 80;
+        struct sched_param sp{}; sp.sched_priority = 48;
         if (pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp) != 0) {
             logger_->error("Failed to set realtime priority for CAN TX thread");
         }
 
         int total_cores = std::thread::hardware_concurrency();
         if (total_cores == 0) total_cores = 4; // Fallback
-        int cpu_id = total_cores - 1;
+        const int little_cores = total_cores > 1 ? total_cores / 2 : 1;
+        int cpu_id = 0;
         
         char last_char = interface_.back();
         if (isdigit(last_char)) {
             int port_num = last_char - '0';
-            cpu_id = total_cores - 1 - port_num;
-            if (cpu_id < 0) cpu_id = 0; 
+            cpu_id = port_num % little_cores;
         }
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
@@ -181,11 +185,13 @@ void MotorsSocketCAN::open(const std::string& interface) {
                 if (!receiving_) break;
                 if (!tx_queue_.pop(tx_frame)) continue;
             }
-            while (::write(sockfd_, &tx_frame, sizeof(can_frame)) < 0 && count < MAX_RETRY_COUNT) {
+            ssize_t written;
+            while ((written = ::write(sockfd_, &tx_frame, sizeof(can_frame))) < 0 &&
+                   count < MAX_RETRY_COUNT) {
                 count += 1;
-                std::this_thread::sleep_for(std::chrono::microseconds(1000));  // Avoid busy-waiting
+                std::this_thread::sleep_for(std::chrono::microseconds(1000));
             }
-            if (count >= MAX_RETRY_COUNT) {
+            if (written < 0) {
                 logger_->error("Failed to transmit CAN frame");
             } else if (send_sleep_us_ > 0) {
                 std::this_thread::sleep_for(std::chrono::microseconds(send_sleep_us_));
@@ -196,8 +202,11 @@ void MotorsSocketCAN::open(const std::string& interface) {
 }
 
 void MotorsSocketCAN::close() {
-    receiving_ = false;
-    tx_cv_.notify_one();
+    {
+        std::lock_guard<std::mutex> lock(tx_mutex_);
+        receiving_ = false;
+    }
+    tx_cv_.notify_all();
     if (receiver_thread_.joinable()) receiver_thread_.join();
     if (sender_thread_.joinable()) sender_thread_.join();
 
@@ -212,11 +221,20 @@ void MotorsSocketCAN::close() {
 }
 
 void MotorsSocketCAN::transmit(const can_frame &frame) {
-    if (sockfd_ == INIT_FD) {
-        logger_->error("Unable to transmit: Socket not open");
+    bool queued = false;
+    {
+        std::lock_guard<std::mutex> lock(tx_mutex_);
+        if (!receiving_) {
+            logger_->error("Unable to transmit: Socket not open");
+            return;
+        }
+        queued = tx_queue_.bounded_push(frame);
+    }
+    if (!queued) {
+        logger_->error("CAN transmit queue on {} is full; dropping frame 0x{:X}",
+                       interface_, frame.can_id);
         return;
     }
-    tx_queue_.bounded_push(frame);
     tx_cv_.notify_one();
 }
 
