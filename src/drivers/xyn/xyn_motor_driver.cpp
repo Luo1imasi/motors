@@ -34,7 +34,7 @@ XynMotorDriver::XynMotorDriver(uint16_t motor_id, const std::string& interface_t
             return static_cast<CanFdCbkId>((raw_id >> 12) & 0x7F);
         });
         canfd_->add_canfd_callback(canfd_callback, static_cast<CanFdCbkId>(device_id_));
-        std::lock_guard<std::mutex> lock(bus_registry_mutex_);
+        std::lock_guard<std::shared_mutex> lock(bus_registry_mutex_);
         bus_registry_[can_interface].push_back(this);
     } else if (interface_type == "ethercat") {
         comm_type_ = CommType::ETHERCAT;
@@ -45,7 +45,7 @@ XynMotorDriver::XynMotorDriver(uint16_t motor_id, const std::string& interface_t
 XynMotorDriver::~XynMotorDriver() { 
     if (comm_type_ == CommType::CANFD) {
         canfd_->remove_canfd_callback(static_cast<CanFdCbkId>(device_id_));
-        std::lock_guard<std::mutex> lock(bus_registry_mutex_);
+        std::lock_guard<std::shared_mutex> lock(bus_registry_mutex_);
         auto it = bus_registry_.find(can_interface_);
         if (it != bus_registry_.end()) {
             auto& motors = it->second;
@@ -348,7 +348,7 @@ void XynMotorDriver::motor_mit_cmd(float* f_p, float* f_v, float* f_kp, float* f
         memset(base, 0, 8);
     }
 
-    std::lock_guard<std::mutex> lock(bus_registry_mutex_);
+    std::shared_lock<std::shared_mutex> lock(bus_registry_mutex_);
     auto it = bus_registry_.find(can_interface_);
     if (it != bus_registry_.end()) {
         for (XynMotorDriver* motor : it->second) {
@@ -383,12 +383,14 @@ void XynMotorDriver::motor_mit_cmd(float* f_p, float* f_v, float* f_kp, float* f
             base[6] = (uint8_t)(((v & 0x0F) << 4) | ((t >> 8) & 0x0F));
             base[7] = (uint8_t)(t & 0xFF);
         }
+        for (XynMotorDriver* motor : it->second) {
+            if (motor && motor->motor_index_ < 8) {
+                motor->response_count_++;
+            }
+        }
     }
 
     canfd_->transmit(tx_frame);
-    {
-        response_count_++;
-    }
 }
 
 void XynMotorDriver::set_motor_control_mode(uint8_t motor_control_mode) {

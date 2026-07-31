@@ -11,7 +11,7 @@ LRO_Limit_Param lro_limit_param[LRO_Num_Of_Motor] = {
     {12.5, 14.24, 141.7, 500.0, 50.0}   // LRO_PJ3_97_10062
 };
 
-LroMotorDriver::LroMotorDriver(uint16_t motor_id, const std::string& interface_type, const std::string& can_interface, 
+LroMotorDriver::LroMotorDriver(uint16_t motor_id, const std::string& interface_type, const std::string& can_interface,
                                LRO_Motor_Model motor_model, double motor_zero_offset)
     : MotorDriver(), motor_model_(motor_model) {
     if (interface_type != "canfd" && interface_type != "ethercanfd" && interface_type != "ethercat") {
@@ -29,7 +29,7 @@ LroMotorDriver::LroMotorDriver(uint16_t motor_id, const std::string& interface_t
 
         CanFdCbkFunc canfd_callback = std::bind(&LroMotorDriver::canfd_rx_cbk, this, std::placeholders::_1);
         canfd_->add_canfd_callback(canfd_callback, motor_id_);
-        std::lock_guard<std::mutex> lock(bus_registry_mutex_);
+        std::lock_guard<std::shared_mutex> lock(bus_registry_mutex_);
         bus_registry_[can_interface].push_back(this);
     } else if (interface_type == "ethercat") {
         comm_type_ = CommType::ETHERCAT;
@@ -40,7 +40,7 @@ LroMotorDriver::LroMotorDriver(uint16_t motor_id, const std::string& interface_t
 LroMotorDriver::~LroMotorDriver() {
     if (comm_type_ == CommType::CANFD) {
         canfd_->remove_canfd_callback(motor_id_);
-        std::lock_guard<std::mutex> lock(bus_registry_mutex_);
+        std::lock_guard<std::shared_mutex> lock(bus_registry_mutex_);
         auto it = bus_registry_.find(can_interface_);
         if (it != bus_registry_.end()) {
             auto& motors = it->second;
@@ -346,7 +346,7 @@ void LroMotorDriver::motor_mit_cmd(float* f_p, float* f_v, float* f_kp, float* f
         base[0] = (LRO_MODE_MIT & 0x07) << 5;
     }
 
-    std::lock_guard<std::mutex> lock(bus_registry_mutex_);
+    std::shared_lock<std::shared_mutex> lock(bus_registry_mutex_);
     auto it = bus_registry_.find(can_interface_);
     if (it != bus_registry_.end()) {
         for (LroMotorDriver* motor : it->second) {
@@ -388,12 +388,14 @@ void LroMotorDriver::motor_mit_cmd(float* f_p, float* f_v, float* f_kp, float* f
             base[6] = (packed >> 8) & 0xFF;
             base[7] = packed & 0xFF;
         }
+        for (LroMotorDriver* motor : it->second) {
+            if (motor && motor->motor_index_ < 8) {
+                motor->response_count_++;
+            }
+        }
     }
 
     canfd_->transmit(tx_frame);
-    {
-        response_count_++;
-    }
 }
 
 void LroMotorDriver::set_motor_control_mode(uint8_t motor_control_mode) {

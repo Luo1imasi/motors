@@ -4,6 +4,7 @@
 #pragma once
 
 #include <atomic>
+#include <shared_mutex>
 #include <string>
 
 #include "motor_driver.hpp"
@@ -135,6 +136,6 @@ class XynMotorDriver : public MotorDriver {
     std::shared_ptr<MotorsSocketCANFD> canfd_;
     // std::shared_ptr<MotorsEthercat> ethercat_;
 
-    inline static std::mutex bus_registry_mutex_;
+    inline static std::shared_mutex bus_registry_mutex_;
     inline static std::unordered_map<std::string, std::vector<XynMotorDriver*>> bus_registry_;
 };
