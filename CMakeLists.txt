@@ -104,8 +104,8 @@ install(TARGETS motors_py
   RUNTIME DESTINATION ${PYTHON_INSTALL_DIR}
 )
 
-install(DIRECTORY firmware/
-  DESTINATION ${PYTHON_INSTALL_DIR}/roboparty_firmware
+install(DIRECTORY scripts/motor_ota/
+  DESTINATION ${PYTHON_INSTALL_DIR}/roboparty_motor_ota
   FILES_MATCHING PATTERN "*.py"
 )
 
