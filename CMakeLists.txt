@@ -104,6 +104,18 @@ install(TARGETS motors_py
   RUNTIME DESTINATION ${PYTHON_INSTALL_DIR}
 )
 
+install(DIRECTORY firmware/
+  DESTINATION ${PYTHON_INSTALL_DIR}/roboparty_firmware
+  FILES_MATCHING PATTERN "*.py"
+)
+
+if(WIN32)
+  install(DIRECTORY firmware/
+    DESTINATION ${PYTHON_INSTALL_DIR}/roboparty_firmware
+    FILES_MATCHING PATTERN "*.dll"
+  )
+endif()
+
 if(ament_cmake_FOUND)
     ament_export_libraries(motors dm_motors evo_motors lro_motors xyn_motors motors_can motors_canfd)
     ament_export_include_directories(include)
