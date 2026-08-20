@@ -104,6 +104,11 @@ install(TARGETS motors_py
   RUNTIME DESTINATION ${PYTHON_INSTALL_DIR}
 )
 
+install(DIRECTORY scripts/motor_ota/
+  DESTINATION ${PYTHON_INSTALL_DIR}/roboparty_motor_ota
+  FILES_MATCHING PATTERN "*.py"
+)
+
 if(ament_cmake_FOUND)
     ament_export_libraries(motors dm_motors evo_motors lro_motors xyn_motors motors_can motors_canfd)
     ament_export_include_directories(include)
