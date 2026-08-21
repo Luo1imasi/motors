@@ -1,3 +1,9 @@
+roboparty-motors (2.2.1-1) stable; urgency=medium
+
+  * Bump package version.
+
+ -- wentywenty <2321901849@qq.com>  Fri, 21 Aug 2026 00:00:00 +0800
+
 roboparty-motors (2.2.0-1) stable; urgency=medium
 
   * add lic
